@@ -1,0 +1,40 @@
+{
+  "name": "sketchflash",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Compile Arduino sketches and flash boards straight from the browser",
+  "scripts": {
+    "assets": "node scripts/prepare-avr-assets.mjs",
+    "predev": "npm run assets",
+    "dev": "vite",
+    "prebuild": "npm run assets",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types tests/run.ts && npm run test:dom",
+    "test:dom": "vite build --config vite.test.config.ts --logLevel warn && node --experimental-strip-types tests/dom.test.ts"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "^6.20.4",
+    "@codemirror/commands": "^6.11.2",
+    "@codemirror/lang-cpp": "^6.0.3",
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/legacy-modes": "^6.5.5",
+    "@codemirror/search": "^6.7.3",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.44.1",
+    "@horang-corp/avr-gcc-wasm": "^0.2.0",
+    "@lezer/highlight": "^1.2.5",
+    "codemirror": "^6.0.2",
+    "esptool-js": "^0.7.1"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^30.0.0",
+    "@types/node": "^26.6.11",
+    "@types/w3c-web-serial": "^1.0.9",
+    "jsdom": "^31.0.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.4.0"
+  }
+}

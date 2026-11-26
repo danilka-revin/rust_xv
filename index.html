@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SketchFlash — прошивка Arduino из браузера</title>
+    <meta
+      name="description"
+      content="Пишите скетч Arduino в браузере, собирайте его настоящим AVR-GCC и прошивайте плату по USB. Без установки Arduino IDE."
+    />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230a0a0a'/%3E%3Cpath d='M9 21V11h5.5a3.5 3.5 0 0 1 0 7H9' stroke='%23fab283' stroke-width='2.2' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='22' cy='20' r='2' fill='%237fd88f'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div id="app" class="app">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M6 18V6h6a4 4 0 0 1 0 8H6" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+              <circle cx="17.5" cy="16.5" r="1.6" fill="currentColor" />
+            </svg>
+          </span>
+          <span class="brand-name">sketchflash</span>
+          <span class="brand-version">0.1</span>
+        </div>
+
+        <div class="sketch-title">
+          <input id="sketch-name" class="sketch-name" value="Blink" spellcheck="false" aria-label="Имя скетча" />
+          <span id="save-state" class="save-state">сохранено</span>
+        </div>
+
+        <div class="topbar-actions">
+          <button id="btn-export" class="btn ghost" title="Скачать собранный .hex">Экспорт</button>
+          <button id="btn-compile" class="btn">
+            <span class="btn-icon">⚙</span> Собрать <kbd>⌘B</kbd>
+          </button>
+          <button id="btn-stop" class="btn danger" hidden>Отменить</button>
+          <button id="btn-flash" class="btn primary">
+            <span class="btn-icon">▶</span> Прошить <kbd>⌘↵</kbd>
+          </button>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <aside class="sidebar">
+          <section class="panel-section">
+            <div class="section-head">
+              <span>Скетчи</span>
+              <button id="btn-new-sketch" class="icon-btn" title="Новый скетч">+</button>
+            </div>
+            <div id="sketch-list" class="sketch-list"></div>
+          </section>
+
+          <section class="panel-section grow">
+            <div class="section-head">
+              <span>Примеры</span>
+            </div>
+            <div id="example-list" class="example-list"></div>
+          </section>
+
+          <section class="panel-section">
+            <div class="section-head">
+              <span>Файлы</span>
+              <button id="btn-add-file" class="icon-btn" title="Добавить .ino в скетч">+</button>
+            </div>
+            <div id="file-list" class="file-list"></div>
+          </section>
+        </aside>
+
+        <main class="editor-pane">
+          <div class="editor-head">
+            <div class="file-tabs" id="file-tabs"></div>
+            <div class="editor-meta">
+              <span id="build-meta" class="meta-chip">не собрано</span>
+            </div>
+          </div>
+
+          <div class="editor-scroll">
+            <div class="editor-host" id="editor"></div>
+            <div class="welcome" id="welcome" hidden>
+              <div class="welcome-inner">
+                <div class="welcome-grid" data-drag-target>Перетащите .ino или .hex сюда</div>
+                <p class="welcome-hint">…или выберите пример слева</p>
+              </div>
+            </div>
+          </div>
+
+          <section class="output-pane" id="output-pane">
+            <div class="output-head">
+              <div class="output-tabs" role="tablist">
+                <button class="output-tab active" data-tab="log" role="tab">Вывод</button>
+                <button class="output-tab" data-tab="problems" role="tab">
+                  Проблемы <span class="pill" id="problem-count">0</span>
+                </button>
+                <button class="output-tab" data-tab="monitor" role="tab">
+                  Монитор порта <span class="pill" id="monitor-dot">●</span>
+                </button>
+              </div>
+              <div class="output-actions">
+                <span id="output-status" class="output-status">готово</span>
+                <button id="btn-clear-output" class="icon-btn" title="Очистить">⌫</button>
+                <button id="btn-toggle-output" class="icon-btn" title="Свернуть панель">▾</button>
+              </div>
+            </div>
+            <div class="output-body">
+              <div class="output-view" id="output-log" role="tabpanel"></div>
+              <div class="output-view hidden" id="output-problems" role="tabpanel"></div>
+              <div class="output-view hidden" id="output-monitor" role="tabpanel">
+                <div class="monitor-bar">
+                  <label class="monitor-field">
+                    <span>Скорость</span>
+                    <select id="monitor-baud">
+                      <option>9600</option>
+                      <option>19200</option>
+                      <option selected>38400</option>
+                      <option>57600</option>
+                      <option>115200</option>
+                    </select>
+                  </label>
+                  <label class="checkbox inline">
+                    <input type="checkbox" id="monitor-autoscroll" checked />
+                    <span>Автопрокрутка</span>
+                  </label>
+                  <label class="checkbox inline">
+                    <input type="checkbox" id="monitor-timestamp" />
+                    <span>Метки времени</span>
+                  </label>
+                  <input id="monitor-send-text" class="monitor-input" placeholder="Отправить в плату…" />
+                  <button id="monitor-send" class="btn ghost small" disabled>Отправить</button>
+                  <button id="monitor-toggle" class="btn small">Открыть порт</button>
+                  <button id="monitor-clear" class="icon-btn" title="Очистить">⌫</button>
+                </div>
+                <div id="monitor-log" class="monitor-log"></div>
+              </div>
+            </div>
+            <div class="progress-track" id="progress-track" hidden><div class="progress-fill" id="progress-fill"></div></div>
+          </section>
+        </main>
+
+        <aside class="inspector">
+          <section class="card">
+            <div class="card-head">
+              <span>Плата</span>
+              <span id="port-badge" class="badge muted">не подключена</span>
+            </div>
+            <div class="card-body">
+              <div class="segmented" id="family-switch">
+                <button class="seg active" data-family="avr">AVR · Uno/Nano</button>
+                <button class="seg" data-family="esp">ESP32 / ESP8266</button>
+              </div>
+
+              <label class="field" id="board-field">
+                <span>Контроллер</span>
+                <select id="board-select">
+                  <option value="uno">ATmega328P · Uno / Nano</option>
+                </select>
+              </label>
+
+              <div class="row-buttons">
+                <button id="btn-connect" class="btn wide">Подключить</button>
+                <button id="btn-disconnect" class="btn ghost" disabled>Отключить</button>
+              </div>
+
+              <div id="esp-files" class="esp-files" hidden>
+                <div class="section-head small">
+                  <span>Образы прошивки</span>
+                  <button id="btn-add-image" class="icon-btn" title="Добавить .bin">+</button>
+                </div>
+                <div id="esp-file-list" class="esp-file-list"></div>
+                <p class="hint">
+                  Один общий <code>.bin</code> — адрес <code>0x0</code>. Раздельные образы ESP-IDF:
+                  <code>0x1000</code> загрузчик, <code>0x8000</code> таблица разделов, <code>0x10000</code> приложение.
+                </p>
+                <label class="checkbox">
+                  <input type="checkbox" id="esp-erase-all" />
+                  <span>Стереть всю флеш-память перед записью</span>
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card-head">
+              <span>Сборка</span>
+              <span class="badge muted" id="toolchain-badge">AVR-GCC wasm</span>
+            </div>
+            <div class="card-body">
+              <div class="memory">
+                <div class="memory-labels">
+                  <span>Flash</span>
+                  <span id="flash-numbers">— / 32 256 Б</span>
+                </div>
+                <div class="memory-track"><div class="memory-fill" id="flash-fill"></div></div>
+              </div>
+              <div class="memory">
+                <div class="memory-labels">
+                  <span>RAM (оценка)</span>
+                  <span id="ram-numbers">— / 2 048 Б</span>
+                </div>
+                <div class="memory-track"><div class="memory-fill ram" id="ram-fill"></div></div>
+              </div>
+              <p class="hint" id="build-hint">Соберите скетч — размеры появятся здесь.</p>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card-head"><span>Как это работает</span></div>
+            <div class="card-body tiny">
+              <p>
+                AVR-скетчи компилируются прямо на этой странице: настоящие <code>avr-gcc</code> и <code>ld</code>,
+                собранные в WebAssembly. Файлы не уходят на сервер.
+              </p>
+              <p>
+                Прошивка идёт через Web Serial — нужен Chrome или Edge на компьютере. Для ESP32/ESP8266 скетчи
+                собираются в Arduino IDE, а сюда загружается готовый <code>.bin</code>.
+              </p>
+            </div>
+          </section>
+        </aside>
+      </div>
+
+      <footer class="statusbar">
+        <span id="status-device" class="status-item">плата не подключена</span>
+        <span class="status-item sep">·</span>
+        <span id="status-cursor" class="status-item">стр 1, стлб 1</span>
+        <span class="status-spacer"></span>
+        <span id="status-build" class="status-item">сборка не запускалась</span>
+      </footer>
+    </div>
+
+    <input type="file" id="file-input" accept=".ino,.txt,.h,.cpp,.c" hidden />
+    <input type="file" id="bin-input" accept=".bin,application/octet-stream" multiple hidden />
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
