@@ -68,7 +68,6 @@ class App {
     saveActiveId(this.active.id);
     this.bindEvents();
     this.bindSerialEvents();
-    this.showWelcome(!this.sketches.length);
     this.applyPlatformShortcuts();
     this.log('Готово. Напишите скетч, нажмите «Собрать» — и «Прошить».', 'info');
     this.log('Компиляция идёт в браузере: avr-gcc 5.4 + binutils в WebAssembly.', 'muted');
@@ -128,7 +127,6 @@ class App {
     this.editor.setDiagnostics([]);
     this.clearBuildInfo();
     this.renderAll();
-    this.showWelcome(false);
     this.persist();
   }
 
@@ -262,7 +260,6 @@ class App {
         this.editor.setDiagnostics([]);
         this.clearBuildInfo();
         this.renderAll();
-        this.showWelcome(false);
         this.persist();
         this.log(`Открыт пример «${example.name}»`, 'info');
       });
@@ -396,10 +393,6 @@ class App {
       row.append(name, addr, size, del);
       host.append(row);
     }
-  }
-
-  private showWelcome(show: boolean): void {
-    $('welcome').hidden = !show;
   }
 
   /* ── logging & build info ───────────────────────────────────────── */
@@ -920,7 +913,6 @@ class App {
       this.outcome = null;
       this.clearBuildInfo();
       this.renderAll();
-      this.showWelcome(false);
       this.persist();
     });
     $('btn-add-file').addEventListener('click', () => this.addFile());
@@ -1002,14 +994,14 @@ class App {
     ['dragenter', 'dragover'].forEach((type) =>
       dropZone.addEventListener(type, (event) => {
         event.preventDefault();
-        document.querySelector('[data-drag-target]')?.classList.add('dragging');
+        $('welcome').classList.add('visible');
       }),
     );
     ['dragleave', 'drop'].forEach((type) =>
       dropZone.addEventListener(type, (event) => {
         event.preventDefault();
         if (type === 'dragleave' && (event as DragEvent).relatedTarget) return;
-        document.querySelector('[data-drag-target]')?.classList.remove('dragging');
+        $('welcome').classList.remove('visible');
       }),
     );
     dropZone.addEventListener('drop', (event) => {

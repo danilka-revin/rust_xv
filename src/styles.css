@@ -278,6 +278,21 @@ kbd {
   opacity: 0.9;
 }
 
+.btn.busy kbd,
+.btn.busy .btn-icon {
+  visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
 .icon-btn {
   display: grid;
   place-items: center;
@@ -554,11 +569,16 @@ kbd {
 .welcome {
   position: absolute;
   inset: 0;
-  display: grid;
+  display: none;
   place-items: center;
-  background: #0a0a0ae6;
-  backdrop-filter: blur(2px);
+  background: #0a0a0a99;
+  backdrop-filter: blur(1.5px);
   z-index: 5;
+  pointer-events: none;
+}
+
+.welcome.visible {
+  display: grid;
 }
 
 .welcome-inner {
@@ -575,9 +595,10 @@ kbd {
   transition: border-color 140ms ease, color 140ms ease;
 }
 
-.welcome-grid.dragging {
+.welcome.visible .welcome-grid {
   border-color: var(--accent);
   color: var(--accent);
+  background: #0a0a0acc;
 }
 
 .welcome-hint {

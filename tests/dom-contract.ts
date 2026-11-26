@@ -18,7 +18,7 @@ assert.deepEqual(missing, [], `main.ts refers to ids missing from index.html: ${
 // CSS classes toggled from JS should exist in the stylesheet, otherwise the UI
 // silently stops reacting.
 const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
-for (const className of ['busy', 'collapsed', 'dragging', 'has-errors', 'has-warnings', 'live', 'over', 'active', 'dirty', 'hidden']) {
+for (const className of ['busy', 'collapsed', 'has-errors', 'has-warnings', 'live', 'over', 'active', 'dirty', 'hidden', 'visible']) {
   assert.ok(css.includes(`.${className}`), `styles.css has no rule for .${className}`);
 }
 
