@@ -7,6 +7,7 @@ export default defineConfig({
     port: 5173,
     strictPort: false,
     allowedHosts: true,
+    watch: { ignored: ['**/dist/**', '**/dist-test/**', '**/.scratch/**'] },
   },
   worker: {
     format: 'es',
