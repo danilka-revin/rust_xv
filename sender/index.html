@@ -1001,13 +1001,26 @@
     window.addEventListener('touchmove', onPointerMove, { passive: false });
     window.addEventListener('touchend', onPointerUp);
 
+    function encodeUtf8MaxBytes(str, maxBytes) {
+      const enc = new TextEncoder();
+      let s = str || '';
+      let bytes = enc.encode(s);
+      while (bytes.length > maxBytes && s.length > 0) {
+        const chars = Array.from(s);
+        chars.pop();
+        s = chars.join('');
+        bytes = enc.encode(s);
+      }
+      return bytes;
+    }
+
     // Кодирование 240x240 холста в формат LVC1 (15 QOI565 полос по 16 строк + UTF-8 подпись)
     function encodeCanvasToLvc(captionText) {
       renderStage(true);
       const imgData = ctx.getImageData(0, 0, 240, 240).data;
       renderStage(false);
 
-      const capBytes = new TextEncoder().encode((captionText || 'Открытка для тебя ❤️').slice(0, 220));
+      const capBytes = encodeUtf8MaxBytes(captionText || 'Открытка для тебя ❤️', 240);
       const stripChunks = [];
 
       for (let s = 0; s < 15; s++) {
