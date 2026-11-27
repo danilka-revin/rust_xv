@@ -50,7 +50,7 @@ static const unsigned long OTA_CHECK_INTERVAL_MS    = 1800000UL; // 30 мину�
 // --- СЕКРЕТНЫЙ ОБЛАЧНЫЙ КАНАЛ СООБЩЕНИЙ NTFY.SH (РАБОТАЕТ ЧЕРЕЗ ИНТЕРНЕТ ИЗДАЛЕКА) ---
 // Должен совпадать с ключом в вашем пульте sender/index.html!
 static const char* NTFY_TOPIC = "love_station_xv_7d92a4c8e1";
-static const unsigned long NTFY_POLL_INTERVAL_MS = 8000UL; // Проверка новых посланий каждые 8 сек
+static const unsigned long NTFY_POLL_INTERVAL_MS = 10000UL; // Проверка новых посланий каждые 10 сек
 
 // --- ПИНЫ XIAO ESP32-C6 (ваша проверенная рабочая схема) ---
 #define TFT_CS    21  // пин D3
@@ -615,8 +615,13 @@ bool extractJsonStringUnescaped(const String& json, const char* key, char* outBu
       outBuf[pos++] = *s++;
     }
   }
+  while (pos > 0 && ((uint8_t)outBuf[pos - 1] & 0xC0) == 0x80) pos--;
+  if (pos > 0 && ((uint8_t)outBuf[pos - 1] & 0x80) != 0) {
+    uint8_t lead = (uint8_t)outBuf[pos - 1];
+    if ((lead & 0xE0) == 0xC0 || (lead & 0xF0) == 0xE0 || (lead & 0xF8) == 0xF0) pos--;
+  }
   outBuf[pos] = '\0';
-  return false;
+  return (pos > 0);
 }
 
 uint32_t extractJsonUintField(const String& json, const char* key) {
@@ -662,17 +667,38 @@ bool extractJsonFloatField(const String& json, const char* key, float &outVal, i
   return parseSimpleFloat(json.c_str() + colon + 1, outVal);
 }
 
+class LvcFilePrint : public Print {
+public:
+  File &file;
+  size_t totalWritten = 0;
+  size_t maxBytes;
+  bool overflow = false;
+  LvcFilePrint(File &f, size_t maxB) : file(f), maxBytes(maxB) {}
+  size_t write(uint8_t b) override { return write(&b, 1); }
+  size_t write(const uint8_t *buf, size_t size) override {
+    if (overflow || totalWritten + size > maxBytes) {
+      overflow = true;
+      return 0;
+    }
+    size_t wr = file.write(buf, size);
+    totalWritten += wr;
+    return wr;
+  }
+};
+
 // Скачивает файл открытки .lvc потоково прямо в LittleFS (/pending.lvc) — всего 1 КБ RAM!
 bool downloadLvcAttachmentToFlash(const char* url, char* outCaption, size_t outCapSize) {
   if (!fsReady || !url || url[0] == '\0') return false;
 
   WiFiClientSecure client;
   client.setInsecure();
-  client.setTimeout(12);
+  client.setTimeout(6);
 
   HTTPClient https;
   https.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-  https.setTimeout(12000);
+  https.setConnectTimeout(4500);
+  https.setTimeout(8000);
+  https.setReuse(false);
 
   if (!https.begin(client, String(url))) return false;
   int code = https.GET();
@@ -682,33 +708,12 @@ bool downloadLvcAttachmentToFlash(const char* url, char* outCaption, size_t outC
   if (code == HTTP_CODE_OK && (totalLen == -1 || (totalLen >= LVC_HEADER_BASE && totalLen <= 250000))) {
     File f = LittleFS.open("/pending.lvc", "w");
     if (f) {
-      WiFiClient* stream = https.getStreamPtr();
-      uint8_t buf[1024];
-      size_t totalWritten = 0;
-      unsigned long lastDataMs = millis();
-
-      while ((https.connected() || stream->available() > 0) &&
-             (totalLen == -1 || (int)totalWritten < totalLen)) {
-        size_t avail = stream->available();
-        if (avail > 0) {
-          size_t toRead = (avail > sizeof(buf)) ? sizeof(buf) : avail;
-          int rd = stream->readBytes(buf, toRead);
-          if (rd > 0) {
-            f.write(buf, (size_t)rd);
-            totalWritten += (size_t)rd;
-            lastDataMs = millis();
-            if (totalWritten > 250000) break;
-          }
-        } else {
-          if (millis() - lastDataMs > 10000UL) break;
-          delay(4);
-        }
-        yield();
-      }
+      LvcFilePrint fp(f, 250000);
+      https.writeToStream(&fp);
       f.close();
 
       LvcMeta meta;
-      if (lvcReadMetaFromFile("/pending.lvc", meta)) {
+      if (!fp.overflow && fp.totalWritten >= LVC_HEADER_BASE && lvcReadMetaFromFile("/pending.lvc", meta)) {
         if (meta.caption[0] != '\0') {
           strncpy(outCaption, meta.caption, outCapSize - 1);
           outCaption[outCapSize - 1] = '\0';
@@ -724,111 +729,152 @@ bool downloadLvcAttachmentToFlash(const char* url, char* outCaption, size_t outC
   return ok;
 }
 
-void readHttpBodyBounded(HTTPClient &https, String &out, size_t maxBytes) {
-  out = "";
-  WiFiClient* stream = https.getStreamPtr();
-  if (!stream) return;
-  uint8_t buf[256];
-  unsigned long startMs = millis();
-  unsigned long lastDataMs = startMs;
-  while ((https.connected() || stream->available() > 0) && out.length() < maxBytes) {
-    int avail = stream->available();
-    if (avail > 0) {
-      size_t toRead = (size_t)avail;
-      if (toRead > sizeof(buf)) toRead = sizeof(buf);
-      if (out.length() + toRead > maxBytes) toRead = maxBytes - out.length();
-      int rd = stream->readBytes(buf, toRead);
-      if (rd > 0) {
-        buf[rd] = '\0';
-        for (int i = 0; i < rd; i++) out += (char)buf[i];
-        lastDataMs = millis();
+class BoundedStringPrint : public Print {
+public:
+  String &out;
+  size_t maxBytes;
+  BoundedStringPrint(String &s, size_t maxB) : out(s), maxBytes(maxB) {}
+  size_t write(uint8_t b) override { return write(&b, 1); }
+  size_t write(const uint8_t *buf, size_t size) override {
+    if (out.length() < maxBytes) {
+      size_t space = maxBytes - out.length();
+      size_t take = (size < space) ? size : space;
+      for (size_t i = 0; i < take; i++) {
+        out += (char)buf[i];
       }
-    } else {
-      if (millis() - lastDataMs > 3000UL || millis() - startMs > 5500UL) break;
-      delay(4);
     }
-    yield();
+    return size;
   }
-}
+};
+
+class NtfyLineStream : public Print {
+public:
+  char* lineBuf;
+  size_t lineCap;
+  size_t lineLen = 0;
+  char* newestId;
+  size_t idCap;
+  char* newestText;
+  size_t textCap;
+  char* newestAttachUrl;
+  size_t attachCap;
+  uint32_t &newestTime;
+
+  NtfyLineStream(char* lb, size_t lc,
+                 char* nId, size_t idC,
+                 char* nTxt, size_t txtC,
+                 char* nAtt, size_t attC,
+                 uint32_t &nTime)
+    : lineBuf(lb), lineCap(lc),
+      newestId(nId), idCap(idC),
+      newestText(nTxt), textCap(txtC),
+      newestAttachUrl(nAtt), attachCap(attC),
+      newestTime(nTime) {}
+
+  void processCurrentLine() {
+    if (lineLen < 10) {
+      lineLen = 0;
+      return;
+    }
+    lineBuf[lineLen] = '\0';
+    String line(lineBuf);
+    lineLen = 0;
+    line.trim();
+    if (line.length() < 10) return;
+
+    char ev[24] = "";
+    if (!extractJsonStringUnescaped(line, "event", ev, sizeof(ev))) return;
+    if (strcmp(ev, "message") != 0) return;
+
+    char mid[32] = "";
+    char mtxt[320] = "";
+    int attPos = findJsonKeyColon(line, "attachment");
+    bool hasMsg = extractJsonStringUnescaped(line, "message", mtxt, sizeof(mtxt));
+    if (extractJsonStringUnescaped(line, "id", mid, sizeof(mid)) && (hasMsg || attPos > 0)) {
+      if (strcmp(mid, lastNtfyId) != 0) {
+        strncpy(newestId, mid, idCap - 1);
+        newestId[idCap - 1] = '\0';
+        strncpy(newestText, mtxt, textCap - 1);
+        newestText[textCap - 1] = '\0';
+        newestTime = extractJsonUintField(line, "time");
+        newestAttachUrl[0] = '\0';
+
+        if (attPos > 0) {
+          extractJsonStringUnescaped(line, "url", newestAttachUrl, attachCap, attPos);
+        }
+      }
+    }
+  }
+
+  size_t write(uint8_t b) override {
+    if (b == '\n') {
+      processCurrentLine();
+    } else if (b != '\r' && lineLen + 1 < lineCap) {
+      lineBuf[lineLen++] = (char)b;
+    }
+    return 1;
+  }
+
+  size_t write(const uint8_t *buf, size_t size) override {
+    for (size_t i = 0; i < size; i++) {
+      write(buf[i]);
+    }
+    return size;
+  }
+};
 
 void ntfyPollTask(void* /*param*/) {
+  static char lineBuf[2048];
   static char newestText[320];
   static char newestId[32];
   static char newestAttachUrl[256];
-  static char ev[24];
-  static char mid[32];
-  static char mtxt[320];
   newestText[0] = '\0';
   newestId[0] = '\0';
   newestAttachUrl[0] = '\0';
   uint32_t newestTime = 0;
+  int httpCode = -1;
 
-  WiFiClientSecure client;
-  client.setInsecure();
-  client.setTimeout(5);
+  {
+    WiFiClientSecure client;
+    client.setInsecure();
+    client.setTimeout(5);
 
-  HTTPClient https;
-  https.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-  https.setConnectTimeout(4500);
-  https.setTimeout(5000);
-  https.setReuse(false);
+    HTTPClient https;
+    https.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    https.setConnectTimeout(4500);
+    https.setTimeout(6000);
+    https.setReuse(false);
 
-  String sinceArg = (lastNtfyId[0] != '\0') ? String(lastNtfyId) : String("48h");
-  String url = String("https://ntfy.sh/") + NTFY_TOPIC + "/json?poll=1&since=" + sinceArg;
+    String sinceArg = (lastNtfyId[0] != '\0') ? String(lastNtfyId) : String("48h");
+    String url = String("https://ntfy.sh/") + NTFY_TOPIC + "/json?poll=1&since=" + sinceArg;
 
-  if (https.begin(client, url)) {
-    int code = https.GET();
-    if (code == HTTP_CODE_OK) {
-      String body;
-      readHttpBodyBounded(https, body, 12288);
-      int startIdx = 0;
-
-      while (startIdx < (int)body.length()) {
-        int nl = body.indexOf('\n', startIdx);
-        String line = (nl >= 0) ? body.substring(startIdx, nl) : body.substring(startIdx);
-        startIdx = (nl >= 0) ? (nl + 1) : body.length();
-        line.trim();
-        if (line.length() < 10) continue;
-
-        ev[0] = '\0';
-        if (!extractJsonStringUnescaped(line, "event", ev, sizeof(ev))) continue;
-        if (strcmp(ev, "message") != 0) continue;
-
-        mid[0] = '\0';
-        mtxt[0] = '\0';
-        if (extractJsonStringUnescaped(line, "id", mid, sizeof(mid)) &&
-            extractJsonStringUnescaped(line, "message", mtxt, sizeof(mtxt))) {
-          if (strcmp(mid, lastNtfyId) != 0) {
-            strncpy(newestId, mid, sizeof(newestId) - 1);
-            newestId[sizeof(newestId) - 1] = '\0';
-            strncpy(newestText, mtxt, sizeof(newestText) - 1);
-            newestText[sizeof(newestText) - 1] = '\0';
-            newestTime = extractJsonUintField(line, "time");
-            newestAttachUrl[0] = '\0';
-
-            int attPos = findJsonKeyColon(line, "attachment");
-            if (attPos > 0) {
-              extractJsonStringUnescaped(line, "url", newestAttachUrl, sizeof(newestAttachUrl), attPos);
-            }
-          }
-        }
+    if (https.begin(client, url)) {
+      httpCode = https.GET();
+      if (httpCode == HTTP_CODE_OK) {
+        NtfyLineStream parser(lineBuf, sizeof(lineBuf),
+                              newestId, sizeof(newestId),
+                              newestText, sizeof(newestText),
+                              newestAttachUrl, sizeof(newestAttachUrl),
+                              newestTime);
+        https.writeToStream(&parser);
+        parser.processCurrentLine();
       }
-
-      if (newestId[0] != '\0' && !incomingMsgPendingApply) {
-        bool gotCard = false;
-        if (newestAttachUrl[0] != '\0') {
-          gotCard = downloadLvcAttachmentToFlash(newestAttachUrl, newestText, sizeof(newestText));
-        }
-        strncpy(pendingMsgId, newestId, sizeof(pendingMsgId) - 1);
-        pendingMsgId[sizeof(pendingMsgId) - 1] = '\0';
-        strncpy(pendingMsgText, newestText, sizeof(pendingMsgText) - 1);
-        pendingMsgText[sizeof(pendingMsgText) - 1] = '\0';
-        pendingMsgEpoch = newestTime;
-        pendingMsgHasCard = gotCard;
-        incomingMsgPendingApply = true;
-      }
+      https.end();
     }
-    https.end();
+  }
+
+  if (httpCode == HTTP_CODE_OK && newestId[0] != '\0' && !incomingMsgPendingApply) {
+    bool gotCard = false;
+    if (newestAttachUrl[0] != '\0') {
+      gotCard = downloadLvcAttachmentToFlash(newestAttachUrl, newestText, sizeof(newestText));
+    }
+    strncpy(pendingMsgId, newestId, sizeof(pendingMsgId) - 1);
+    pendingMsgId[sizeof(pendingMsgId) - 1] = '\0';
+    strncpy(pendingMsgText, newestText, sizeof(pendingMsgText) - 1);
+    pendingMsgText[sizeof(pendingMsgText) - 1] = '\0';
+    pendingMsgEpoch = newestTime;
+    pendingMsgHasCard = gotCard;
+    incomingMsgPendingApply = true;
   }
 
   ntfyPollRunning = false;
@@ -922,7 +968,8 @@ void weatherPollTask(void* /*param*/) {
     int code = https.GET();
     if (code == HTTP_CODE_OK) {
       String body;
-      readHttpBodyBounded(https, body, 4096);
+      BoundedStringPrint bp(body, 4096);
+      https.writeToStream(&bp);
       int curPos = findJsonKeyColon(body, "current");
       if (curPos >= 0) {
         float t = 0.0f, app = 0.0f, wcode = 0.0f, wind = 0.0f;
@@ -1914,7 +1961,8 @@ void otaCheckTask(void* /*param*/) {
     int code = https.GET();
     if (code == HTTP_CODE_OK) {
       String payload;
-      readHttpBodyBounded(https, payload, 2048);
+      BoundedStringPrint bp(payload, 2048);
+      https.writeToStream(&bp);
       char remVer[24] = "";
       char remBin[256] = "";
       if (extractJsonStringUnescaped(payload, "version", remVer, sizeof(remVer)) &&
@@ -2625,6 +2673,7 @@ void loop() {
         lastFrameMs = nowMs;
         renderBigHeartFrame(64, 30, nowMs, false);
       }
+      delay(2);
       return;
     }
   }
@@ -2645,6 +2694,7 @@ void loop() {
   if (transActive) {
     stepPageTransition(nowMs);
     lastFrameMs = nowMs;
+    delay(2);
     return;
   }
 
@@ -2697,4 +2747,7 @@ void loop() {
     uint32_t ep = getCurrentUtcEpoch();
     if (ep > 0) prefs.putUInt("lastEpoch", ep);
   }
+
+  // На одноядерном ESP32-C6 delay(2) отдаёт время IDLE0 для освобождения завершённых FreeRTOS-задач и сброса WDT
+  delay(2);
 }
