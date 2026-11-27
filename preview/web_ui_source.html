@@ -658,7 +658,7 @@
         </div>
 
         <div style="font-size:13px; color:var(--text-muted); margin-bottom:10px;">
-          Версия системы: <strong id="fwVerText">v1.3.7</strong> (автообновление включено)
+          Версия системы: <strong id="fwVerText">v1.3.8</strong> (автообновление включено)
         </div>
         <button type="button" class="btn btn-soft" id="otaCheckBtn" onclick="triggerOtaCheck()">
           🔄 Проверить обновление с GitHub
@@ -696,7 +696,7 @@
       </div>
 
       <div id="weatherMiniPill" style="margin-top:10px; font-size:13px; font-weight:600; color:var(--pink-dark); background:#fff4f8; border:1px solid #ffd8e6; border-radius:14px; padding:8px 12px;">
-        🌤 Погода: <span id="weatherMiniText">—</span> • <span style="color:#0f8f4e;">Гулябельно ❤️</span>
+        🌤 Погода: <span id="weatherMiniText">—</span> • <span id="weatherMoodText" style="color:#0f8f4e;">Гулябельно ❤️</span>
       </div>
 
       <div style="margin-top: 16px;">
@@ -1194,13 +1194,30 @@
       const alertBox = document.getElementById('otaAlert');
       btn.disabled = true;
       btn.textContent = 'Проверяем GitHub...';
-      alertBox.className = 'alert';
-      alertBox.style.display = 'none';
+      alertBox.className = 'alert ok';
+      alertBox.style.display = 'block';
+      alertBox.textContent = 'Связываемся с GitHub...';
       try {
         const res = await fetch('/api/ota_check', { method: 'POST' });
         const data = await res.json();
-        alertBox.className = 'alert ok';
-        alertBox.textContent = data.message || 'Запущена проверка обновлений.';
+        alertBox.textContent = data.message || 'Проверяем обновления...';
+        for (let i = 0; i < 12; i++) {
+          await new Promise(r => setTimeout(r, 800));
+          const stRes = await fetch('/api/ota_status');
+          const st = await stRes.json();
+          if (st.code === 1) continue;
+          if (st.code === 2) {
+            alertBox.className = 'alert ok';
+            alertBox.textContent = 'Установлена самая свежая версия прошивки ✓';
+          } else if (st.code === 4) {
+            alertBox.className = 'alert ok';
+            alertBox.textContent = `Найдена новая версия v${st.ver}! Станция обновляется...`;
+          } else {
+            alertBox.className = 'alert err';
+            alertBox.textContent = 'Файл firmware.bin ещё не опубликован на GitHub или сеть недоступна.';
+          }
+          break;
+        }
       } catch (e) {
         alertBox.className = 'alert err';
         alertBox.textContent = 'Не удалось связаться со станцией.';
@@ -1215,12 +1232,16 @@
         const res = await fetch('/api/weather');
         const w = await res.json();
         const el = document.getElementById('weatherMiniText');
+        const moodEl = document.getElementById('weatherMoodText');
         if (!el) return;
         if (w.valid) {
           const sign = w.temp > 0 ? '+' : '';
           el.textContent = `${w.city} ${sign}${w.temp}°C (${w.desc})`;
         } else {
           el.textContent = `${w.city || 'Москва'}: —`;
+        }
+        if (moodEl && w.mood) {
+          moodEl.textContent = w.mood;
         }
       } catch (e) {}
     }
