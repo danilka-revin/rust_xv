@@ -27,7 +27,6 @@
 #include <Update.h>
 #include <WebServer.h>
 #include <DNSServer.h>
-#include <ESPmDNS.h>
 #include <Preferences.h>
 #include <LittleFS.h>
 #include <time.h>
@@ -651,14 +650,39 @@ uint32_t extractJsonUintField(const String& json, const char* key) {
   return (uint32_t)strtoul(p, nullptr, 10);
 }
 
+bool parseSimpleFloat(const char* p, float &outVal) {
+  if (!p) return false;
+  while (*p == ' ' || *p == '\t') p++;
+  bool neg = false;
+  if (*p == '-') { neg = true; p++; }
+  else if (*p == '+') { p++; }
+
+  bool anyDigit = false;
+  float val = 0.0f;
+  while (*p >= '0' && *p <= '9') {
+    anyDigit = true;
+    val = val * 10.0f + (float)(*p - '0');
+    p++;
+  }
+  if (*p == '.') {
+    p++;
+    float frac = 0.1f;
+    while (*p >= '0' && *p <= '9') {
+      anyDigit = true;
+      val += (float)(*p - '0') * frac;
+      frac *= 0.1f;
+      p++;
+    }
+  }
+  if (!anyDigit) return false;
+  outVal = neg ? -val : val;
+  return true;
+}
+
 bool extractJsonFloatField(const String& json, const char* key, float &outVal, int startFrom = 0) {
   int colon = findJsonKeyColon(json, key, startFrom);
   if (colon < 0) return false;
-  const char* p = json.c_str() + colon + 1;
-  while (*p == ' ') p++;
-  char* endPtr = nullptr;
-  outVal = strtof(p, &endPtr);
-  return (endPtr != p);
+  return parseSimpleFloat(json.c_str() + colon + 1, outVal);
 }
 
 // Скачивает файл открытки .lvc потоково прямо в LittleFS (/pending.lvc) — всего 1 КБ RAM!
@@ -858,11 +882,17 @@ void weatherPollTask(void* /*param*/) {
   https.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   https.setTimeout(8000);
 
+  long latE4 = (long)roundf(weatherLat * 10000.0f);
+  long lonE4 = (long)roundf(weatherLon * 10000.0f);
+  bool latNeg = (latE4 < 0); if (latNeg) latE4 = -latE4;
+  bool lonNeg = (lonE4 < 0); if (lonNeg) lonE4 = -lonE4;
+
   char urlBuf[200];
   snprintf(urlBuf, sizeof(urlBuf),
-           "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f"
+           "https://api.open-meteo.com/v1/forecast?latitude=%s%ld.%04ld&longitude=%s%ld.%04ld"
            "&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m&wind_speed_unit=ms",
-           weatherLat, weatherLon);
+           latNeg ? "-" : "", latE4 / 10000L, latE4 % 10000L,
+           lonNeg ? "-" : "", lonE4 / 10000L, lonE4 % 10000L);
 
   if (https.begin(client, String(urlBuf))) {
     int code = https.GET();
@@ -2044,7 +2074,6 @@ bool connectToSavedWifi(unsigned long timeoutMs) {
   if (WiFi.status() == WL_CONNECTED) {
     wifiConnected = true;
     configureNtp();
-    MDNS.begin("love");
     nextOtaCheckMs = millis() + OTA_FIRST_CHECK_DELAY_MS;
     nextNtfyPollMs = millis() + 3000UL;
     nextWeatherPollMs = millis() + 5000UL;
@@ -2055,9 +2084,14 @@ bool connectToSavedWifi(unsigned long timeoutMs) {
   return false;
 }
 
+void sendWebUiGzip() {
+  server.sendHeader("Content-Encoding", "gzip");
+  server.send_P(200, "text/html; charset=utf-8", (const char*)WEB_HTML_GZ, WEB_HTML_GZ_LEN);
+}
+
 void setupWebRoutes() {
   server.on("/", HTTP_GET, []() {
-    server.send_P(200, "text/html; charset=utf-8", WEB_HTML);
+    sendWebUiGzip();
   });
 
   server.on("/api/status", HTTP_GET, []() {
@@ -2100,10 +2134,14 @@ void setupWebRoutes() {
       prefs.putString("wCity", weatherCity);
     }
     if (server.hasArg("lat") && server.hasArg("lon")) {
-      weatherLat = server.arg("lat").toFloat();
-      weatherLon = server.arg("lon").toFloat();
-      prefs.putFloat("wLat", weatherLat);
-      prefs.putFloat("wLon", weatherLon);
+      float latV = weatherLat, lonV = weatherLon;
+      if (parseSimpleFloat(server.arg("lat").c_str(), latV) &&
+          parseSimpleFloat(server.arg("lon").c_str(), lonV)) {
+        weatherLat = latV;
+        weatherLon = lonV;
+        prefs.putFloat("wLat", weatherLat);
+        prefs.putFloat("wLon", weatherLon);
+      }
     }
     weatherValid = false;
     nextWeatherPollMs = millis() + 200UL;
@@ -2267,9 +2305,9 @@ void setupWebRoutes() {
 
       wifiConnected = true;
       configureNtp();
-      MDNS.begin("love");
       nextOtaCheckMs = millis() + OTA_FIRST_CHECK_DELAY_MS;
       nextNtfyPollMs = millis() + 3000UL;
+      nextWeatherPollMs = millis() + 5000UL;
       String homeIp = WiFi.localIP().toString();
 
       String resp = "{\"ok\":true,\"ip\":\"" + homeIp + "\"}";
@@ -2300,7 +2338,7 @@ void setupWebRoutes() {
       server.sendHeader("Location", "http://192.168.4.1/", true);
       server.send(302, "text/plain", "");
     } else {
-      server.send_P(200, "text/html; charset=utf-8", WEB_HTML);
+      sendWebUiGzip();
     }
   });
 
@@ -2500,7 +2538,6 @@ void loop() {
       if (nowConn) {
         wifiConnected = true;
         configureNtp();
-        MDNS.begin("love");
         nextOtaCheckMs = nowMs + OTA_FIRST_CHECK_DELAY_MS;
         nextNtfyPollMs = nowMs + 3000UL;
         nextWeatherPollMs = nowMs + 5000UL;

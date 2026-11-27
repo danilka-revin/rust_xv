@@ -1,0 +1,1260 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Станция отношений</title>
+  <style>
+    :root {
+      --bg-top: #fff2f6;
+      --bg-bottom: #fde6ee;
+      --card-bg: rgba(255, 255, 255, 0.90);
+      --pink-main: #f04372;
+      --pink-dark: #d42a58;
+      --text-main: #3f222e;
+      --text-muted: #87586a;
+      --ok-bg: #eafaf1;
+      --ok-text: #1b7a46;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: linear-gradient(160deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding: 20px 16px 44px;
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    .bg-hearts {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+    }
+
+    .bg-heart {
+      position: absolute;
+      bottom: -40px;
+      color: rgba(240, 67, 114, 0.12);
+      animation: floatUp linear infinite;
+      user-select: none;
+    }
+
+    @keyframes floatUp {
+      0% { transform: translateY(0) scale(0.85) rotate(0deg); opacity: 0; }
+      15% { opacity: 1; }
+      85% { opacity: 1; }
+      100% { transform: translateY(-110vh) scale(1.2) rotate(20deg); opacity: 0; }
+    }
+
+    .container {
+      max-width: 440px;
+      margin: 0 auto;
+      position: relative;
+      z-index: 1;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 16px;
+      padding-top: 4px;
+    }
+
+    .heart-avatar {
+      width: 68px;
+      height: 68px;
+      margin: 0 auto 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at 35% 30%, #ff82a1, #e82e61);
+      border-radius: 50%;
+      box-shadow: 0 10px 24px rgba(232, 46, 97, 0.28);
+      animation: heartbeat 1.5s ease-in-out infinite;
+    }
+
+    .heart-avatar svg {
+      width: 36px;
+      height: 36px;
+      fill: #ffffff;
+    }
+
+    @keyframes heartbeat {
+      0%, 100% { transform: scale(1); }
+      14% { transform: scale(1.11); }
+      28% { transform: scale(1); }
+      42% { transform: scale(1.06); }
+      65% { transform: scale(1); }
+    }
+
+    .title {
+      font-size: 23px;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+      color: var(--text-main);
+    }
+
+    .subtitle {
+      font-size: 13.5px;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 9px;
+      padding: 5px 13px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.80);
+      border: 1px solid rgba(240, 67, 114, 0.20);
+      color: var(--text-muted);
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #f59e0b;
+    }
+
+    .dot.online {
+      background: #22c55e;
+      box-shadow: 0 0 8px rgba(34, 197, 94, 0.50);
+    }
+
+    /* Вкладки страниц 1 и 2 */
+    .tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.65);
+      padding: 5px;
+      border-radius: 18px;
+      margin-bottom: 14px;
+      border: 1px solid rgba(240, 67, 114, 0.16);
+    }
+
+    .tab-btn {
+      border: none;
+      border-radius: 14px;
+      padding: 10px 8px;
+      font-size: 14px;
+      font-weight: 700;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: 0.18s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .tab-btn.active {
+      background: #ffffff;
+      color: var(--pink-dark);
+      box-shadow: 0 4px 12px rgba(212, 42, 88, 0.12);
+    }
+
+    .unread-pill {
+      background: var(--pink-main);
+      color: #fff;
+      font-size: 10.5px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-weight: 800;
+    }
+
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-radius: 24px;
+      padding: 22px 18px;
+      margin-bottom: 16px;
+      box-shadow: 0 10px 28px rgba(175, 58, 94, 0.09);
+      border: 1px solid rgba(255, 255, 255, 0.92);
+    }
+
+    .card-title {
+      font-size: 17px;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 6px;
+    }
+
+    .card-desc {
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--text-muted);
+      text-align: center;
+      margin-bottom: 16px;
+    }
+
+    .since-pill {
+      display: inline-block;
+      background: #fff0f5;
+      color: var(--pink-dark);
+      font-weight: 700;
+      font-size: 13px;
+      padding: 5px 14px;
+      border-radius: 999px;
+      margin-bottom: 14px;
+    }
+
+    .timer-center {
+      text-align: center;
+    }
+
+    .days-hero {
+      margin: 4px 0 16px;
+    }
+
+    .days-number {
+      font-size: 52px;
+      font-weight: 900;
+      line-height: 1.05;
+      background: linear-gradient(135deg, #e82e61, #ff6b8b);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      word-break: break-word;
+    }
+
+    .days-word {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-muted);
+      margin-top: 4px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .time-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .time-box {
+      background: linear-gradient(180deg, #fff8fa 0%, #ffeff4 100%);
+      border: 1px solid #ffd9e5;
+      border-radius: 18px;
+      padding: 12px 6px;
+      text-align: center;
+    }
+
+    .time-val {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--text-main);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .time-lbl {
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+
+    .totals-box {
+      background: #fff8fa;
+      border-radius: 16px;
+      padding: 12px 14px;
+      font-size: 13.5px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      border: 1px solid #ffe0ea;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .totals-box strong {
+      color: var(--pink-dark);
+    }
+
+    /* Страница 2 — Послания и круглые открытки */
+    .card-round-wrap {
+      display: flex;
+      justify-content: center;
+      margin: 10px 0 12px;
+    }
+
+    canvas.round-postcard {
+      width: 240px;
+      height: 240px;
+      border-radius: 50%;
+      background: #140910;
+      box-shadow: 0 12px 30px rgba(212, 42, 88, 0.20), 0 0 0 4px #ffd6e5;
+      display: block;
+    }
+
+    @keyframes pageFadeSlide {
+      from { opacity: 0; transform: translateY(8px) scale(0.985); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .page-anim {
+      animation: pageFadeSlide 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .msg-bubble {
+      background: linear-gradient(180deg, #fff8fa 0%, #ffeff4 100%);
+      border: 1.5px solid #ffd1e0;
+      border-radius: 20px;
+      padding: 18px 16px;
+      font-size: 17px;
+      font-weight: 600;
+      line-height: 1.5;
+      color: var(--text-main);
+      text-align: center;
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin: 8px 0 10px;
+    }
+
+    .msg-meta {
+      text-align: center;
+      font-size: 12.5px;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+    }
+
+    .history-list {
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid #f5dce5;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .history-item {
+      background: rgba(255, 248, 250, 0.8);
+      border: 1px solid #f6dfe7;
+      border-radius: 14px;
+      padding: 10px 12px;
+      font-size: 13.5px;
+      line-height: 1.45;
+      color: var(--text-main);
+    }
+
+    .history-time {
+      display: block;
+      font-size: 11.5px;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+
+    .btn {
+      width: 100%;
+      border: none;
+      border-radius: 16px;
+      padding: 14px 18px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.14s ease, box-shadow 0.2s ease, opacity 0.2s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn:active {
+      transform: scale(0.97);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #f04372 0%, #d92657 100%);
+      color: #fff;
+      box-shadow: 0 8px 20px rgba(217, 38, 87, 0.26);
+    }
+
+    .btn-soft {
+      background: #fff0f5;
+      color: var(--pink-dark);
+      border: 1px solid #ffcadd;
+    }
+
+    .btn:disabled {
+      opacity: 0.65;
+      cursor: wait;
+    }
+
+    .steps {
+      background: #fff8fa;
+      border-radius: 16px;
+      padding: 12px 14px;
+      margin-bottom: 16px;
+      border: 1px solid #ffe0ea;
+      font-size: 13.5px;
+      line-height: 1.5;
+      color: var(--text-main);
+    }
+
+    .steps div + div {
+      margin-top: 6px;
+    }
+
+    .step-num {
+      display: inline-flex;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--pink-main);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      align-items: center;
+      justify-content: center;
+      margin-right: 6px;
+    }
+
+    .field-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: var(--text-main);
+    }
+
+    .net-list {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      max-height: 195px;
+      overflow-y: auto;
+      margin-bottom: 12px;
+    }
+
+    .net-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 11px 14px;
+      background: #fff;
+      border: 1.5px solid #f2dbe3;
+      border-radius: 14px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .net-item.selected {
+      border-color: var(--pink-main);
+      background: #fff2f6;
+      color: var(--pink-dark);
+    }
+
+    .input-wrap {
+      position: relative;
+      margin-bottom: 14px;
+    }
+
+    .input {
+      width: 100%;
+      padding: 13px 44px 13px 14px;
+      border-radius: 14px;
+      border: 1.5px solid #edd0db;
+      background: #fff;
+      font-size: 15px;
+      color: var(--text-main);
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .input:focus {
+      border-color: var(--pink-main);
+    }
+
+    .eye-btn {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      border: none;
+      background: none;
+      font-size: 18px;
+      cursor: pointer;
+      padding: 4px;
+    }
+
+    .select {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1.5px solid #edd0db;
+      background: #fff;
+      font-size: 14.5px;
+      color: var(--text-main);
+      margin-bottom: 14px;
+      outline: none;
+    }
+
+    .alert {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      font-size: 13.5px;
+      line-height: 1.45;
+      display: none;
+    }
+
+    .alert.ok {
+      display: block;
+      background: var(--ok-bg);
+      color: var(--ok-text);
+      border: 1px solid #abefc6;
+    }
+
+    .alert.err {
+      display: block;
+      background: #fff1f2;
+      color: #be123c;
+      border: 1px solid #fecdd3;
+    }
+
+    .ip-chip {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 7px 13px;
+      background: #fff;
+      border-radius: 10px;
+      font-weight: 800;
+      color: var(--pink-dark);
+      border: 1px solid #ffc2d4;
+      text-decoration: none;
+    }
+
+    .settings-toggle {
+      text-align: center;
+      margin-top: 6px;
+    }
+
+    .link-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 13.5px;
+      font-weight: 600;
+      text-decoration: underline;
+      cursor: pointer;
+      padding: 8px;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-hearts" id="bgHearts"></div>
+
+  <div class="container">
+    <div class="header">
+      <div class="heart-avatar">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+        </svg>
+      </div>
+      <div class="title">Станция отношений</div>
+      <div class="subtitle">Маленький хранитель нашей любви</div>
+      <div class="badge">
+        <span class="dot" id="wifiDot"></span>
+        <span id="wifiBadgeText">Проверяем соединение...</span>
+      </div>
+    </div>
+
+    <!-- НАВИГАЦИЯ ПО 2 СТРАНИЦАМ -->
+    <div class="tabs" id="mainTabs">
+      <button type="button" class="tab-btn active" id="tabBtn1" onclick="switchPage(1)">
+        ⏱ Наше время
+      </button>
+      <button type="button" class="tab-btn" id="tabBtn2" onclick="switchPage(2)">
+        💌 Послания <span class="unread-pill hidden" id="unreadBadge">1</span>
+      </button>
+    </div>
+
+    <!-- БЛОК НАСТРОЙКИ WI-FI -->
+    <div class="card hidden" id="setupCard">
+      <div class="card-title" id="setupTitle">Подключение к домашнему Wi-Fi</div>
+      <div class="card-desc" id="setupDesc">
+        Выбери домашнюю сеть — пароль сохранится в памяти станции и больше вводить его не придётся.
+      </div>
+
+      <div class="steps">
+        <div><span class="step-num">1</span>Выбери свой домашний Wi-Fi в списке ниже</div>
+        <div><span class="step-num">2</span>Введи пароль от сети</div>
+        <div><span class="step-num">3</span>Нажми «Подключить к Wi-Fi»</div>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <span class="field-label" style="margin:0;">Доступные сети:</span>
+        <button type="button" class="link-btn" style="padding:2px 4px; font-size:12.5px;" onclick="scanNetworks(true)">🔄 Обновить</button>
+      </div>
+
+      <div class="net-list" id="netList">
+        <div style="text-align:center; padding:14px; color:#87586a; font-size:13.5px;">Поиск сетей Wi-Fi...</div>
+      </div>
+
+      <label class="field-label" for="ssidInput">Название сети (Wi-Fi):</label>
+      <div class="input-wrap">
+        <input class="input" id="ssidInput" type="text" placeholder="Выбери выше или введи вручную" autocomplete="off">
+      </div>
+
+      <label class="field-label" for="passInput">Пароль:</label>
+      <div class="input-wrap">
+        <input class="input" id="passInput" type="password" placeholder="Пароль от домашнего Wi-Fi">
+        <button type="button" class="eye-btn" onclick="togglePass()" title="Показать пароль">👁️</button>
+      </div>
+
+      <label class="field-label" for="tzSelect">Часовой пояс:</label>
+      <select class="select" id="tzSelect">
+        <option value="2">Калининград (UTC+2)</option>
+        <option value="3" selected>Москва / Санкт-Петербург (UTC+3)</option>
+        <option value="4">Самара (UTC+4)</option>
+        <option value="5">Екатеринбург (UTC+5)</option>
+        <option value="6">Омск (UTC+6)</option>
+        <option value="7">Новосибирск / Красноярск (UTC+7)</option>
+        <option value="8">Иркутск (UTC+8)</option>
+        <option value="9">Якутск (UTC+9)</option>
+        <option value="10">Владивосток (UTC+10)</option>
+        <option value="1">Европа / Амстердам (UTC+1)</option>
+      </select>
+
+      <button type="button" class="btn btn-primary" id="saveWifiBtn" onclick="connectWifi()">
+        Подключить к Wi-Fi
+      </button>
+
+      <div class="alert" id="wifiAlert"></div>
+
+      <div id="otaBox" class="hidden" style="margin-top:18px; padding-top:16px; border-top:1px solid #f2dbe3; text-align:center;">
+        <div style="text-align:left; margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid #f2dbe3;">
+          <label class="field-label" for="weatherCityInput">🌤 Город для 4-й страницы погоды:</label>
+          <div style="display:flex; gap:8px;">
+            <input class="input" id="weatherCityInput" type="text" value="Москва" placeholder="Например: Казань" style="padding:10px 12px;">
+            <button type="button" class="btn btn-soft" style="width:auto; padding:10px 14px; white-space:nowrap;" id="saveCityBtn" onclick="saveWeatherCity()">
+              Сохранить
+            </button>
+          </div>
+          <div class="alert" id="cityAlert"></div>
+        </div>
+
+        <div style="font-size:13px; color:var(--text-muted); margin-bottom:10px;">
+          Версия системы: <strong id="fwVerText">v1.3.0</strong> (автообновление включено)
+        </div>
+        <button type="button" class="btn btn-soft" id="otaCheckBtn" onclick="triggerOtaCheck()">
+          🔄 Проверить обновление с GitHub
+        </button>
+        <div class="alert" id="otaAlert"></div>
+      </div>
+    </div>
+
+    <!-- СТРАНИЦА 1: ТАЙМЕР ОТНОШЕНИЙ -->
+    <div class="card timer-center page-anim" id="page1Card">
+      <div class="since-pill">Мы вместе с 21 октября 2026</div>
+
+      <div class="days-hero">
+        <div class="days-number" id="daysNum">0</div>
+        <div class="days-word" id="daysWord">ДНЕЙ ВМЕСТЕ</div>
+      </div>
+
+      <div class="time-grid">
+        <div class="time-box">
+          <div class="time-val" id="hoursVal">00</div>
+          <div class="time-lbl" id="hoursLbl">часов</div>
+        </div>
+        <div class="time-box">
+          <div class="time-val" id="minsVal">00</div>
+          <div class="time-lbl" id="minsLbl">минут</div>
+        </div>
+        <div class="time-box">
+          <div class="time-val" id="secsVal">00</div>
+          <div class="time-lbl" id="secsLbl">секунд</div>
+        </div>
+      </div>
+
+      <div class="totals-box" id="cuteStats">
+        Считаем время...
+      </div>
+
+      <div id="weatherMiniPill" style="margin-top:10px; font-size:13px; font-weight:600; color:var(--pink-dark); background:#fff4f8; border:1px solid #ffd8e6; border-radius:14px; padding:8px 12px;">
+        🌤 Погода: <span id="weatherMiniText">—</span> • <span style="color:#0f8f4e;">Гулябельно ❤️</span>
+      </div>
+
+      <div style="margin-top: 16px;">
+        <button type="button" class="btn btn-soft" id="pulseBtn" onclick="sendLovePulse()">
+          ❤️ Послать сердечко в ответ
+        </button>
+      </div>
+    </div>
+
+    <!-- СТРАНИЦА 2: ВХОДЯЩИЕ ПОСЛАНИЯ И КРУГЛЫЕ ОТКРЫТКИ -->
+    <div class="card hidden page-anim" id="page2Card">
+      <div class="card-title">Послание для тебя</div>
+
+      <div class="card-round-wrap hidden" id="page2RoundWrap">
+        <canvas class="round-postcard" id="page2CardCanvas" width="240" height="240"></canvas>
+      </div>
+
+      <div class="msg-bubble" id="latestMsgText">—</div>
+      <div class="msg-meta" id="latestMsgTime">—</div>
+
+      <button type="button" class="btn btn-primary" id="replyHeartBtn" onclick="sendLovePulse(true)">
+        ❤️ Отправить сердечко в ответ
+      </button>
+
+      <div class="history-list hidden" id="historyWrap">
+        <div style="font-size:12.5px; font-weight:700; color:var(--text-muted); margin-bottom:2px;">
+          Предыдущие сообщения:
+        </div>
+        <div id="historyItems"></div>
+      </div>
+    </div>
+
+    <div class="settings-toggle" id="settingsToggleWrap">
+      <button type="button" class="link-btn" onclick="toggleSetupCard()">
+        ⚙️ Настройки Wi-Fi и системы
+      </button>
+    </div>
+  </div>
+
+  <script>
+    let tzOffsetHours = 3;
+    let activePage = 1;
+    let selectedCardIdx = 0;
+    let lastCardSig = '';
+
+    function plural(n, one, two, five) {
+      n = Math.abs(n) % 100;
+      let n1 = n % 10;
+      if (n > 10 && n < 20) return five;
+      if (n1 > 1 && n1 < 5) return two;
+      if (n1 === 1) return one;
+      return five;
+    }
+
+    function pad2(v) {
+      return String(v).padStart(2, '0');
+    }
+
+    function switchPage(pageNum) {
+      activePage = pageNum;
+      document.getElementById('tabBtn1').classList.toggle('active', pageNum === 1);
+      document.getElementById('tabBtn2').classList.toggle('active', pageNum === 2);
+      const p1 = document.getElementById('page1Card');
+      const p2 = document.getElementById('page2Card');
+      p1.classList.toggle('hidden', pageNum !== 1);
+      p2.classList.toggle('hidden', pageNum !== 2);
+
+      const target = (pageNum === 1) ? p1 : p2;
+      target.classList.remove('page-anim');
+      void target.offsetWidth;
+      target.classList.add('page-anim');
+
+      if (pageNum === 2) {
+        document.getElementById('unreadBadge').classList.add('hidden');
+        fetch('/api/mark_read', { method: 'POST' }).catch(() => {});
+        loadMessages();
+      }
+    }
+
+    function updateLoveTimer() {
+      const nowUtcSec = Math.floor(Date.now() / 1000);
+      const startLocalAsUtc = 1792540800 - (tzOffsetHours * 3600);
+      let diff = nowUtcSec - startLocalAsUtc;
+      if (diff < 0) diff = 0;
+
+      const days = Math.floor(diff / 86400);
+      const hours = Math.floor((diff % 86400) / 3600);
+      const mins = Math.floor((diff % 3600) / 60);
+      const secs = diff % 60;
+
+      document.getElementById('daysNum').textContent = days.toLocaleString('ru-RU');
+      document.getElementById('daysWord').textContent = plural(days, 'ДЕНЬ ВМЕСТЕ', 'ДНЯ ВМЕСТЕ', 'ДНЕЙ ВМЕСТЕ');
+
+      document.getElementById('hoursVal').textContent = pad2(hours);
+      document.getElementById('hoursLbl').textContent = plural(hours, 'час', 'часа', 'часов');
+
+      document.getElementById('minsVal').textContent = pad2(mins);
+      document.getElementById('minsLbl').textContent = plural(mins, 'минута', 'минуты', 'минут');
+
+      document.getElementById('secsVal').textContent = pad2(secs);
+      document.getElementById('secsLbl').textContent = plural(secs, 'секунда', 'секунды', 'секунд');
+
+      const totalHours = Math.floor(diff / 3600);
+      const totalMins = Math.floor(diff / 60);
+      document.getElementById('cuteStats').innerHTML =
+        `Всего: <strong>${totalHours.toLocaleString('ru-RU')}</strong> ${plural(totalHours, 'час', 'часа', 'часов')} • ` +
+        `<strong>${totalMins.toLocaleString('ru-RU')}</strong> ${plural(totalMins, 'минута', 'минуты', 'минут')}<br>` +
+        `или <strong>${diff.toLocaleString('ru-RU')}</strong> ${plural(diff, 'секунда', 'секунды', 'секунд')}`;
+    }
+
+    function spawnBgHearts() {
+      const wrap = document.getElementById('bgHearts');
+      const symbols = ['❤', '♥'];
+      for (let i = 0; i < 10; i++) {
+        const el = document.createElement('div');
+        el.className = 'bg-heart';
+        el.textContent = symbols[i % symbols.length];
+        el.style.left = (Math.random() * 94 + 2) + '%';
+        el.style.fontSize = (14 + Math.random() * 14) + 'px';
+        el.style.animationDuration = (11 + Math.random() * 10) + 's';
+        el.style.animationDelay = (-Math.random() * 16) + 's';
+        wrap.appendChild(el);
+      }
+    }
+
+    function togglePass() {
+      const inp = document.getElementById('passInput');
+      inp.type = inp.type === 'password' ? 'text' : 'password';
+    }
+
+    function toggleSetupCard() {
+      const card = document.getElementById('setupCard');
+      const hidden = card.classList.toggle('hidden');
+      if (!hidden) {
+        scanNetworks(false);
+        card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
+    async function syncPhoneTime() {
+      try {
+        const epoch = Math.floor(Date.now() / 1000);
+        await fetch('/api/sync_time?epoch=' + epoch, { method: 'POST' });
+      } catch (e) {}
+    }
+
+    function formatEpochRu(ep) {
+      if (!ep || ep < 1700000000) return '—';
+      const d = new Date(ep * 1000);
+      return d.toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+    }
+
+    function decodeLvcToCanvas(buf, canvasEl) {
+      const u8 = new Uint8Array(buf);
+      if (u8.length < 70 || u8[0] !== 76 || u8[1] !== 86 || u8[2] !== 67 || u8[3] !== 49) return false;
+      const dv = new DataView(buf);
+      const capLen = dv.getUint16(8, true);
+      const stripLens = [];
+      for (let i = 0; i < 15; i++) stripLens.push(dv.getUint32(10 + i * 4, true));
+
+      const ctx = canvasEl.getContext('2d');
+      const img = ctx.createImageData(240, 240);
+      const d = img.data;
+      let offset = 70 + capLen;
+      let outPix = 0;
+
+      for (let s = 0; s < 15; s++) {
+        const end = offset + stripLens[s];
+        const index = new Uint16Array(64);
+        let prev = 0;
+        let p = offset;
+        let stripLeft = 240 * 16;
+
+        while (stripLeft > 0) {
+          let b1 = p < end ? u8[p++] : 0x40;
+          if (b1 === 0xFE) {
+            prev = ((u8[p] << 8) | u8[p + 1]) & 0xFFFF;
+            p += 2;
+          } else if ((b1 & 0xC0) === 0x40) {
+            let run = (b1 & 0x3F) + 1;
+            const r = ((prev >> 11) & 0x1F) * 255 / 31;
+            const g = ((prev >> 5)  & 0x3F) * 255 / 63;
+            const b = ( prev        & 0x1F) * 255 / 31;
+            while (run-- > 0 && stripLeft > 0) {
+              const o = outPix * 4;
+              d[o] = r; d[o + 1] = g; d[o + 2] = b; d[o + 3] = 255;
+              outPix++; stripLeft--;
+            }
+            continue;
+          } else if ((b1 & 0xC0) === 0x00) {
+            prev = index[b1 & 0x3F];
+          } else if ((b1 & 0xC0) === 0x80) {
+            const pr = (prev >> 11) & 0x1F, pg = (prev >> 5) & 0x3F, pb = prev & 0x1F;
+            const nr = (pr + ((b1 >> 4) & 3) - 2) & 0x1F;
+            const ng = (pg + ((b1 >> 2) & 3) - 2) & 0x3F;
+            const nb = (pb + ( b1       & 3) - 2) & 0x1F;
+            prev = (nr << 11) | (ng << 5) | nb;
+          } else {
+            const b2 = u8[p++];
+            const pr = (prev >> 11) & 0x1F, pg = (prev >> 5) & 0x3F, pb = prev & 0x1F;
+            const dg = (b1 & 0x1F) - 16;
+            const dg2 = Math.trunc(dg / 2);
+            const nr = (pr + dg2 + (((b2 >> 4) & 0x0F) - 8)) & 0x1F;
+            const ng = (pg + dg) & 0x3F;
+            const nb = (pb + dg2 + (( b2       & 0x0F) - 8)) & 0x1F;
+            prev = (nr << 11) | (ng << 5) | nb;
+          }
+          const r5 = (prev >> 11) & 0x1F, g6 = (prev >> 5) & 0x3F, b5 = prev & 0x1F;
+          index[(r5 * 3 + g6 * 5 + b5 * 7) & 63] = prev;
+          const o = outPix * 4;
+          d[o] = r5 * 255 / 31; d[o + 1] = g6 * 255 / 63; d[o + 2] = b5 * 255 / 31; d[o + 3] = 255;
+          outPix++; stripLeft--;
+        }
+        offset = end;
+      }
+      ctx.putImageData(img, 0, 0);
+      return true;
+    }
+
+    async function loadCardCanvas(idx) {
+      const wrap = document.getElementById('page2RoundWrap');
+      const canvas = document.getElementById('page2CardCanvas');
+      try {
+        const res = await fetch('/api/card?idx=' + idx);
+        if (!res.ok) { wrap.classList.add('hidden'); return; }
+        const buf = await res.arrayBuffer();
+        if (decodeLvcToCanvas(buf, canvas)) {
+          wrap.classList.remove('hidden');
+        } else {
+          wrap.classList.add('hidden');
+        }
+      } catch (e) {
+        wrap.classList.add('hidden');
+      }
+    }
+
+    function viewHistoryItem(idx, text, time, hasCard) {
+      selectedCardIdx = idx;
+      document.getElementById('latestMsgText').textContent = text || 'Открытка для тебя ❤️';
+      document.getElementById('latestMsgTime').textContent = formatEpochRu(time);
+      if (hasCard) loadCardCanvas(idx);
+      else document.getElementById('page2RoundWrap').classList.add('hidden');
+    }
+
+    async function loadMessages() {
+      try {
+        const res = await fetch('/api/messages');
+        const data = await res.json();
+        const sig = `${data.latest_text}|${data.latest_time}|${data.latest_has_card}`;
+        if (selectedCardIdx === 0) {
+          if (data.latest_text) {
+            document.getElementById('latestMsgText').textContent = data.latest_text;
+            document.getElementById('latestMsgTime').textContent = formatEpochRu(data.latest_time);
+          }
+          if (data.latest_has_card) {
+            if (sig !== lastCardSig) {
+              lastCardSig = sig;
+              loadCardCanvas(0);
+            }
+          } else {
+            lastCardSig = sig;
+            document.getElementById('page2RoundWrap').classList.add('hidden');
+          }
+        }
+        if (data.unread && activePage !== 2) {
+          document.getElementById('unreadBadge').classList.remove('hidden');
+        } else {
+          document.getElementById('unreadBadge').classList.add('hidden');
+        }
+
+        const histWrap = document.getElementById('historyWrap');
+        const histBox = document.getElementById('historyItems');
+        if (Array.isArray(data.history) && data.history.length > 1) {
+          histWrap.classList.remove('hidden');
+          histBox.innerHTML = data.history.map((item, idx) =>
+            `<div class="history-item" style="cursor:pointer;" onclick="viewHistoryItem(${idx}, ${JSON.stringify(item.text).replace(/"/g,'&quot;')}, ${item.time}, ${!!item.has_card})">${item.has_card ? '🖼 ' : ''}${escapeHtml(item.text)}<span class="history-time">${formatEpochRu(item.time)}</span></div>`
+          ).join('');
+        } else {
+          histWrap.classList.add('hidden');
+        }
+      } catch (e) {}
+    }
+
+    async function loadStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+
+        if (typeof data.tz_offset === 'number') {
+          tzOffsetHours = data.tz_offset;
+          document.getElementById('tzSelect').value = String(data.tz_offset);
+          updateLoveTimer();
+        }
+        if (data.version) {
+          document.getElementById('fwVerText').textContent = 'v' + data.version;
+        }
+        if (data.weather_city && document.getElementById('weatherCityInput')) {
+          document.getElementById('weatherCityInput').value = data.weather_city;
+        }
+        if (data.saved_ssid && !document.getElementById('ssidInput').value) {
+          document.getElementById('ssidInput').value = data.saved_ssid;
+        }
+        if (data.has_saved_pass) {
+          document.getElementById('passInput').placeholder = 'Пароль сохранён в памяти ✓';
+        }
+
+        const dot = document.getElementById('wifiDot');
+        const badge = document.getElementById('wifiBadgeText');
+        const setupCard = document.getElementById('setupCard');
+        const toggleWrap = document.getElementById('settingsToggleWrap');
+
+        if (data.connected) {
+          dot.classList.add('online');
+          badge.textContent = `В сети "${data.ssid}" (${data.ip})`;
+          setupCard.classList.add('hidden');
+          toggleWrap.classList.remove('hidden');
+          document.getElementById('otaBox').classList.remove('hidden');
+          document.getElementById('setupTitle').textContent = 'Настройки Wi-Fi и системы';
+          document.getElementById('setupDesc').textContent = 'Пароль от Wi-Fi сохранён в памяти. Здесь можно сменить сеть, часовой пояс или проверить обновление.';
+        } else {
+          dot.classList.remove('online');
+          badge.textContent = 'Ожидает подключения к домашнему Wi-Fi';
+          setupCard.classList.remove('hidden');
+          toggleWrap.classList.add('hidden');
+          document.getElementById('otaBox').classList.add('hidden');
+          scanNetworks(false);
+        }
+      } catch (e) {
+        document.getElementById('wifiBadgeText').textContent = 'Нет связи со станцией';
+      }
+    }
+
+    async function scanNetworks(forceRefresh) {
+      const list = document.getElementById('netList');
+      list.innerHTML = '<div style="text-align:center; padding:14px; color:#87586a; font-size:13.5px;">Поиск сетей Wi-Fi...</div>';
+      try {
+        const url = forceRefresh ? '/api/scan?refresh=1' : '/api/scan';
+        for (let attempt = 0; attempt < 6; attempt++) {
+          const res = await fetch(url && attempt === 0 ? url : '/api/scan');
+          const payload = await res.json();
+          if (payload && payload.scanning) {
+            await new Promise(r => setTimeout(r, 750));
+            continue;
+          }
+          const nets = Array.isArray(payload) ? payload : (payload.networks || []);
+          if (nets.length === 0) {
+            list.innerHTML = '<div style="text-align:center; padding:14px; color:#87586a; font-size:13.5px;">Сети не найдены — введи название ниже вручную</div>';
+            return;
+          }
+          list.innerHTML = '';
+          nets.forEach(net => {
+            const row = document.createElement('div');
+            row.className = 'net-item';
+            const bars = net.rssi > -60 ? 'Отличный сигнал' : (net.rssi > -75 ? 'Хороший сигнал' : 'Слабый сигнал');
+            row.innerHTML = `<span>${escapeHtml(net.ssid)} ${net.open ? '' : '🔒'}</span><span style="font-size:12px; color:#87586a;">${bars}</span>`;
+            row.onclick = () => {
+              document.querySelectorAll('.net-item').forEach(el => el.classList.remove('selected'));
+              row.classList.add('selected');
+              document.getElementById('ssidInput').value = net.ssid;
+              document.getElementById('passInput').focus();
+            };
+            list.appendChild(row);
+          });
+          return;
+        }
+        list.innerHTML = '<div style="text-align:center; padding:14px; color:#87586a; font-size:13.5px;">Введи название сети вручную ниже</div>';
+      } catch (e) {
+        list.innerHTML = '<div style="text-align:center; padding:14px; color:#87586a; font-size:13.5px;">Можно ввести название сети вручную ниже</div>';
+      }
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[m]));
+    }
+
+    async function connectWifi() {
+      const ssid = document.getElementById('ssidInput').value.trim();
+      const pass = document.getElementById('passInput').value;
+      const tz = parseInt(document.getElementById('tzSelect').value, 10) || 3;
+      const alertBox = document.getElementById('wifiAlert');
+      const btn = document.getElementById('saveWifiBtn');
+
+      alertBox.className = 'alert';
+      alertBox.style.display = 'none';
+
+      if (!ssid) {
+        alertBox.className = 'alert err';
+        alertBox.textContent = 'Выбери сеть из списка или введи её название.';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Подключаемся...';
+
+      try {
+        const body = new URLSearchParams({
+          ssid: ssid,
+          pass: pass,
+          tz: String(tz),
+          epoch: String(Math.floor(Date.now() / 1000))
+        });
+
+        const res = await fetch('/api/connect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body.toString()
+        });
+        const data = await res.json();
+
+        tzOffsetHours = tz;
+        updateLoveTimer();
+
+        if (data.ok) {
+          alertBox.className = 'alert ok';
+          alertBox.innerHTML =
+            `Готово! Сеть <b>${escapeHtml(ssid)}</b> и пароль сохранены в памяти станции.<br>` +
+            `Переключи телефон на домашний Wi-Fi и открывай страницу по адресу:<br>` +
+            `<a class="ip-chip" href="http://${data.ip}">http://${data.ip}</a>`;
+          setTimeout(loadStatus, 2500);
+        } else {
+          alertBox.className = 'alert err';
+          alertBox.textContent = 'Не удалось подключиться. Проверь пароль от Wi-Fi и попробуй ещё раз.';
+        }
+      } catch (e) {
+        alertBox.className = 'alert ok';
+        alertBox.innerHTML = 'Настройки сохранены! Новый адрес страницы отобразится на экране устройства.';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Подключить к Wi-Fi';
+      }
+    }
+
+    async function sendLovePulse(fromMessagesPage) {
+      const btn = document.getElementById(fromMessagesPage ? 'replyHeartBtn' : 'pulseBtn');
+      const oldText = btn.textContent;
+      btn.textContent = 'Сердечко отправлено ✓';
+      try {
+        await fetch('/api/pulse?reply=1', { method: 'POST' });
+      } catch (e) {}
+      setTimeout(() => { btn.textContent = oldText; }, 1800);
+    }
+
+    async function triggerOtaCheck() {
+      const btn = document.getElementById('otaCheckBtn');
+      const alertBox = document.getElementById('otaAlert');
+      btn.disabled = true;
+      btn.textContent = 'Проверяем GitHub...';
+      alertBox.className = 'alert';
+      alertBox.style.display = 'none';
+      try {
+        const res = await fetch('/api/ota_check', { method: 'POST' });
+        const data = await res.json();
+        alertBox.className = 'alert ok';
+        alertBox.textContent = data.message || 'Запущена проверка обновлений.';
+      } catch (e) {
+        alertBox.className = 'alert err';
+        alertBox.textContent = 'Не удалось связаться со станцией.';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🔄 Проверить обновление с GitHub';
+      }
+    }
+
+    async function loadWeather() {
+      try {
+        const res = await fetch('/api/weather');
+        const w = await res.json();
+        const el = document.getElementById('weatherMiniText');
+        if (!el) return;
+        if (w.valid) {
+          const sign = w.temp > 0 ? '+' : '';
+          el.textContent = `${w.city} ${sign}${w.temp}°C (${w.desc})`;
+        } else {
+          el.textContent = `${w.city || 'Москва'}: —`;
+        }
+      } catch (e) {}
+    }
+
+    async function saveWeatherCity() {
+      const inp = document.getElementById('weatherCityInput');
+      const alertBox = document.getElementById('cityAlert');
+      const btn = document.getElementById('saveCityBtn');
+      const city = inp.value.trim();
+      if (!city) return;
+
+      btn.disabled = true;
+      btn.textContent = '...';
+      alertBox.className = 'alert';
+      alertBox.style.display = 'none';
+
+      const fallbackCoords = {
+        'москва': [55.7558, 37.6173],
+        'санкт-петербург': [59.9343, 30.3351],
+        'казань': [55.7961, 49.1064],
+        'екатеринбург': [56.8389, 60.6057],
+        'новосибирск': [55.0084, 82.9357],
+        'нижний новгород': [56.2965, 43.9361],
+        'сочи': [43.6028, 39.7342],
+        'амстердам': [52.3676, 4.9041],
+        'харлем': [52.3874, 4.6462],
+        'минск': [53.9006, 27.5590]
+      };
+
+      let lat = null, lon = null, resolvedName = city;
+      try {
+        const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=ru`);
+        const geo = await geoRes.json();
+        if (geo && geo.results && geo.results.length > 0) {
+          lat = geo.results[0].latitude;
+          lon = geo.results[0].longitude;
+          resolvedName = geo.results[0].name || city;
+        }
+      } catch (e) {}
+
+      if (lat === null) {
+        const fb = fallbackCoords[city.toLowerCase()];
+        if (fb) { lat = fb[0]; lon = fb[1]; }
+      }
+
+      if (lat === null) {
+        alertBox.className = 'alert err';
+        alertBox.textContent = 'Не удалось найти координаты города — проверь интернет или название.';
+        btn.disabled = false;
+        btn.textContent = 'Сохранить';
+        return;
+      }
+
+      try {
+        const body = new URLSearchParams({ city: resolvedName, lat: String(lat), lon: String(lon) });
+        await fetch('/api/weather_city', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body.toString()
+        });
+        inp.value = resolvedName;
+        alertBox.className = 'alert ok';
+        alertBox.textContent = `Город "${resolvedName}" сохранён! Погода обновится через пару секунд.`;
+        setTimeout(loadWeather, 2500);
+      } catch (e) {
+        alertBox.className = 'alert err';
+        alertBox.textContent = 'Ошибка сохранения города.';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Сохранить';
+      }
+    }
+
+    spawnBgHearts();
+    updateLoveTimer();
+    setInterval(updateLoveTimer, 1000);
+    setInterval(loadMessages, 5000);
+    setInterval(loadWeather, 30000);
+    syncPhoneTime();
+    loadStatus();
+    loadMessages();
+    loadWeather();
+  </script>
+</body>
+</html>

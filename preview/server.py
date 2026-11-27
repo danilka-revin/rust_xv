@@ -7,6 +7,7 @@
 - Удалённый конструктор открыток (/sender) и сайт станции (/site)
 """
 
+import gzip
 import json
 import os
 import re
@@ -64,6 +65,10 @@ MOCK_NETWORKS = [
 def load_esp_html() -> str:
     with open(WEB_UI_H, "r", encoding="utf-8") as f:
         raw = f.read()
+    m_gz = re.search(r'WEB_HTML_GZ\[\]\s*PROGMEM\s*=\s*\{(.*?)\};', raw, re.DOTALL)
+    if m_gz:
+        vals = bytes(int(x, 16) for x in re.findall(r'0x[0-9a-fA-F]+', m_gz.group(1)))
+        return gzip.decompress(vals).decode("utf-8")
     m = re.search(r'R"rawliteral\((.*)\)rawliteral"', raw, re.DOTALL)
     return m.group(1).strip() if m else "<h1>web_ui.h parse error</h1>"
 
