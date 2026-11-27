@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Интерактивное превью «Станция отношений» v1.3.6:
-- Круглый экран GC9A01A (4 страницы с плавными переходами по Кнопке 2: Таймер → Послания → IP/Сердце → Погода)
-- Поддержка полноэкранных открыток LVC1 (фото + разные шрифты + эмодзи) на 2-й странице экрана и сайта
-- 4-я страница погоды с «ГУЛЯБЕЛЬНО ❤» в любую погоду
-- Удалённый конструктор открыток (/sender) и сайт станции (/site)
+Интерактивное превью «Станция отношений» v1.3.7:
+- Круглый экран GC9A01A (5 страниц с плавными переходами по Кнопке 2: Таймер → Открытка → Текст → Погода → IP/Сердце)
+- Поддержка полноэкранных открыток LVC1 на 2-й странице и отдельного текстового сообщения на 3-й странице
+- 4-я страница погоды с «ГУЛЯБЕЛЬНО ❤», 5-я страница — информация о сайте
+- Удалённый конструктор открыток/сообщений (/sender) и сайт станции (/site)
 """
 
 import gzip
@@ -29,11 +29,15 @@ STATE = {
     "has_saved_pass": True,
     "ip": "192.168.1.48",
     "tz_offset": 3,
-    "version": "1.3.6",
+    "version": "1.3.7",
     "pulse_seq": 0,
     "ota_seq": 0,
     "msg_seq": 0,
+    "plain_seq": 0,
     "unread": False,
+    "plain_unread": False,
+    "plain_text": "Люблю тебя без повода ❤️",
+    "plain_time": int(time.time()) - 300,
     "weather": {
         "valid": True,
         "city": "Москва",
@@ -285,12 +289,13 @@ STUDIO_HTML = r"""<!DOCTYPE html>
 
     let state = {
       connected: true, ssid: 'Home_WiFi_5G', ip: '192.168.1.48', tz_offset: 3,
-      version: '1.3.6', pulse_seq: 0, ota_seq: 0, msg_seq: 0, unread: false,
+      version: '1.3.7', pulse_seq: 0, ota_seq: 0, msg_seq: 0, plain_seq: 0, unread: false, plain_unread: false,
+      plain_text: 'Люблю тебя без повода ❤️', plain_time: 1795785300,
       weather: { valid: true, city: 'Москва', temp: 12, feels: 10, wind: 3, code: 2, desc: 'Переменная облачность', walkable: true },
       messages: [{ text: 'Я всегда рядом с тобой ❤️', time: 1795785000, has_card: false }]
     };
-    let lastPulseSeq = 0, lastOtaSeq = 0, lastMsgSeq = 0;
-    let screenMode = 'timer'; // 'ap' | 'timer' | 'messages' | 'heart_ip' | 'weather'
+    let lastPulseSeq = 0, lastOtaSeq = 0, lastMsgSeq = 0, lastPlainSeq = 0;
+    let screenMode = 'timer'; // 'ap' | 'timer' | 'messages' | 'text_msg' | 'weather' | 'heart_ip'
     let pulseUntil = 0;
     let pulseReplyShown = false;
     let bannerUntil = 0;
@@ -532,17 +537,17 @@ STUDIO_HTML = r"""<!DOCTYPE html>
       if (onPhoto) {
         ctx.fillStyle = '#1f0b15';
         ctx.beginPath();
-        ctx.roundRect(92, y - 5, 56, 11, 5);
+        ctx.roundRect(86, y - 5, 68, 11, 5);
         ctx.fill();
       }
-      for (let i = 1; i <= 4; i++) {
-        const x = 102 + (i - 1) * 12;
+      for (let i = 1; i <= 5; i++) {
+        const x = 96 + (i - 1) * 12;
         ctx.beginPath();
         ctx.arc(x, y, 3, 0, Math.PI * 2);
         if (i === pageNum) {
           ctx.fillStyle = '#ff4977';
           ctx.fill();
-        } else if (i === 2 && state.unread) {
+        } else if ((i === 2 && state.unread) || (i === 3 && state.plain_unread)) {
           ctx.fillStyle = '#ffe58f';
           ctx.fill();
         } else {
@@ -687,8 +692,8 @@ STUDIO_HTML = r"""<!DOCTYPE html>
       return lines.length ? lines : [''];
     }
 
-    function drawMessagesScreen(now, dtSec) {
-      if (hasDecodedCard) {
+    function drawMessagesScreen(now, dtSec, isTextPage = false) {
+      if (!isTextPage && hasDecodedCard) {
         ctx.drawImage(cardOff, 0, 0);
         drawRings();
         drawPageDots(2, true);
@@ -697,11 +702,18 @@ STUDIO_HTML = r"""<!DOCTYPE html>
 
       drawRings();
       drawMiniHeartSmooth(120, 27, now, true);
-      centerText(state.unread ? 'НОВОЕ ПОСЛАНИЕ' : 'ПОСЛАНИЕ ДЛЯ ТЕБЯ', 45, 11, state.unread ? '#ffe58f' : '#ffb6c1');
+      const isUnread = isTextPage ? state.plain_unread : state.unread;
+      const hdrText = isTextPage
+        ? (isUnread ? 'НОВОЕ СООБЩЕНИЕ' : 'СООБЩЕНИЕ')
+        : (isUnread ? 'НОВОЕ ПОСЛАНИЕ' : 'ПОСЛАНИЕ ДЛЯ ТЕБЯ');
+      centerText(hdrText, 45, 11, isUnread ? '#ffe58f' : '#ffb6c1');
 
-      const latest = (state.messages && state.messages[0]) ? state.messages[0] : { text: 'Я всегда рядом ❤️', time: 0 };
-      if (latest.text !== lastMsgRenderedText) {
-        lastMsgRenderedText = latest.text;
+      const latest = isTextPage
+        ? { text: state.plain_text || 'Нет сообщений', time: state.plain_time || 0 }
+        : ((state.messages && state.messages[0]) ? state.messages[0] : { text: 'Я всегда рядом ❤️', time: 0 });
+      const cacheKey = (isTextPage ? 'T:' : 'M:') + latest.text;
+      if (cacheKey !== lastMsgRenderedText) {
+        lastMsgRenderedText = cacheKey;
         msgScrollY = 0; msgScrollDir = 1; msgPauseSec = 1.8;
       }
 
@@ -747,7 +759,7 @@ STUDIO_HTML = r"""<!DOCTYPE html>
       lines.forEach((ln, i) => mctx.fillText(ln, 86, startY + i * lineStep));
       mctx.restore();
 
-      mctx.strokeStyle = state.unread ? '#ff4977' : '#4a1830';
+      mctx.strokeStyle = isUnread ? '#ff4977' : '#4a1830';
       mctx.lineWidth = 1.5;
       mctx.beginPath();
       mctx.roundRect(0.75, 0.75, 170.5, 84.5, 14);
@@ -755,10 +767,10 @@ STUDIO_HTML = r"""<!DOCTYPE html>
 
       ctx.drawImage(msgOff, 34, 62);
       const d = latest.time ? new Date(latest.time * 1000) : new Date();
-      const tStr = `Получено ${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')} в ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+      const tStr = latest.time ? `Получено ${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')} в ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` : '—';
       centerText(tStr, 156, 10, '#b896a4');
       centerText('Кн.1 (10с) - послать ♥', 173, 10, '#ffb6c1');
-      drawPageDots(2, false);
+      drawPageDots(isTextPage ? 3 : 2, false);
     }
 
     function beginTransition(target) {
@@ -871,12 +883,12 @@ STUDIO_HTML = r"""<!DOCTYPE html>
           draw3DHeart(120, 86, getBeatScale(now) * elastic, false, now);
           centerText('Адрес страницы:', 143, 10.5, '#b896a4');
           centerText(state.ip, 157, 17, '#ffe58f');
-          centerText(`Wi-Fi ок • v${state.version || '1.3.6'}`, 180, 10.5, '#55f29b');
-          drawPageDots(3, false);
+          centerText(`Wi-Fi ок • v${state.version || '1.3.7'}`, 180, 10.5, '#55f29b');
+          drawPageDots(5, false);
         } else if (screenMode === 'weather') {
           drawWeatherScreen(now);
         } else {
-          drawMessagesScreen(now, dtSec);
+          drawMessagesScreen(now, dtSec, screenMode === 'text_msg');
         }
 
         if (p >= 1) transActive = false;
@@ -936,7 +948,9 @@ STUDIO_HTML = r"""<!DOCTYPE html>
         centerText('love', 160, 19, '#55f29b');
         centerText('Сайт: 192.168.4.1', 185, 11, '#ffe58f');
       } else if (screenMode === 'messages') {
-        drawMessagesScreen(now, dtSec);
+        drawMessagesScreen(now, dtSec, false);
+      } else if (screenMode === 'text_msg') {
+        drawMessagesScreen(now, dtSec, true);
       } else if (screenMode === 'weather') {
         drawWeatherScreen(now);
       } else if (screenMode === 'heart_ip') {
@@ -945,8 +959,8 @@ STUDIO_HTML = r"""<!DOCTYPE html>
         draw3DHeart(120, 86, getBeatScale(now), false, now);
         centerText('Адрес страницы:', 143, 10.5, '#b896a4');
         centerText(state.ip, 157, 17, '#ffe58f');
-        centerText(`Wi-Fi ок • v${state.version || '1.3.6'}`, 180, 10.5, '#55f29b');
-        drawPageDots(3, false);
+        centerText(`Wi-Fi ок • v${state.version || '1.3.7'}`, 180, 10.5, '#55f29b');
+        drawPageDots(5, false);
       } else {
         drawRings();
         drawMiniHeartSmooth(120, 31, now, false);
@@ -1019,9 +1033,12 @@ STUDIO_HTML = r"""<!DOCTYPE html>
           fetch('/api/mark_read', { method: 'POST' }).catch(() => {});
           beginTransition('messages');
         } else if (cur === 'messages') {
-          beginTransition('heart_ip');
-        } else if (cur === 'heart_ip') {
+          fetch('/api/mark_read', { method: 'POST' }).catch(() => {});
+          beginTransition('text_msg');
+        } else if (cur === 'text_msg') {
           beginTransition('weather');
+        } else if (cur === 'weather') {
+          beginTransition('heart_ip');
         } else {
           beginTransition('timer');
         }
@@ -1077,6 +1094,10 @@ STUDIO_HTML = r"""<!DOCTYPE html>
           lastMsgSeq = d.msg_seq;
           await fetchLatestCardIfAny();
           if (d.connected) beginTransition('messages');
+        }
+        if (d.plain_seq !== lastPlainSeq) {
+          lastPlainSeq = d.plain_seq;
+          if (d.connected) beginTransition('text_msg');
         }
       } catch (e) {}
     }
@@ -1158,6 +1179,9 @@ class PreviewHandler(BaseHTTPRequestHandler):
                 "latest_text": latest["text"],
                 "latest_time": latest["time"],
                 "latest_has_card": latest.get("has_card", False),
+                "plain_text": STATE.get("plain_text", "—"),
+                "plain_time": STATE.get("plain_time", 0),
+                "plain_unread": STATE.get("plain_unread", False),
                 "history": STATE["messages"][:5],
             })
         elif path == "/api/card":
@@ -1192,6 +1216,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
             self._send_json({"ok": True})
         elif path == "/api/mark_read":
             STATE["unread"] = False
+            STATE["plain_unread"] = False
             self._send_json({"ok": True})
         elif path == "/api/pulse":
             from_hw = (qs.get("from_hw") or ["0"])[0] == "1"
@@ -1223,15 +1248,24 @@ class PreviewHandler(BaseHTTPRequestHandler):
                 payload = json.loads(body_bytes.decode("utf-8"))
                 txt = (payload.get("message") or "").strip()
                 if txt:
-                    CARDS.insert(0, None)
-                    del CARDS[5:]
-                    STATE["messages"].insert(0, {"text": txt, "time": int(time.time()), "has_card": False})
-                    STATE["messages"] = STATE["messages"][:5]
-                    STATE["unread"] = True
-                    STATE["msg_seq"] += 1
+                    STATE["plain_text"] = txt
+                    STATE["plain_time"] = int(time.time())
+                    STATE["plain_unread"] = True
+                    STATE["plain_seq"] += 1
             except Exception:
                 pass
             self._send_json({"ok": True})
+        elif path == "/api/text_msg":
+            form = urllib.parse.parse_qs(body_bytes.decode("utf-8"))
+            txt = (form.get("text") or [""])[0].strip()
+            if txt:
+                STATE["plain_text"] = txt
+                STATE["plain_time"] = int(time.time())
+                STATE["plain_unread"] = True
+                STATE["plain_seq"] += 1
+                self._send_json({"ok": True})
+            else:
+                self._send_json({"ok": False}, 400)
         elif path == "/api/ota_check":
             STATE["ota_seq"] += 1
             self._send_json({
