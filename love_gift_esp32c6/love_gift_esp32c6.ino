@@ -668,13 +668,16 @@ bool extractJsonFloatField(const String& json, const char* key, float &outVal, i
   return parseSimpleFloat(json.c_str() + colon + 1, outVal);
 }
 
-class LvcFilePrint : public Print {
+class LvcFilePrint : public Stream {
 public:
   File &file;
   size_t totalWritten = 0;
   size_t maxBytes;
   bool overflow = false;
   LvcFilePrint(File &f, size_t maxB) : file(f), maxBytes(maxB) {}
+  int available() override { return 0; }
+  int read() override { return -1; }
+  int peek() override { return -1; }
   size_t write(uint8_t b) override { return write(&b, 1); }
   size_t write(const uint8_t *buf, size_t size) override {
     if (overflow || totalWritten + size > maxBytes) {
@@ -730,11 +733,14 @@ bool downloadLvcAttachmentToFlash(const char* url, char* outCaption, size_t outC
   return ok;
 }
 
-class BoundedStringPrint : public Print {
+class BoundedStringPrint : public Stream {
 public:
   String &out;
   size_t maxBytes;
   BoundedStringPrint(String &s, size_t maxB) : out(s), maxBytes(maxB) {}
+  int available() override { return 0; }
+  int read() override { return -1; }
+  int peek() override { return -1; }
   size_t write(uint8_t b) override { return write(&b, 1); }
   size_t write(const uint8_t *buf, size_t size) override {
     if (out.length() < maxBytes) {
@@ -748,7 +754,7 @@ public:
   }
 };
 
-class NtfyLineStream : public Print {
+class NtfyLineStream : public Stream {
 public:
   char* lineBuf;
   size_t lineCap;
@@ -771,6 +777,10 @@ public:
       newestText(nTxt), textCap(txtC),
       newestAttachUrl(nAtt), attachCap(attC),
       newestTime(nTime) {}
+
+  int available() override { return 0; }
+  int read() override { return -1; }
+  int peek() override { return -1; }
 
   void processCurrentLine() {
     if (lineLen < 10) {
