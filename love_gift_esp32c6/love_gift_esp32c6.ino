@@ -34,6 +34,7 @@
 #include <sys/time.h>
 #include <math.h>
 
+#include "app_types.h"
 #include "cyrillic_font.h"
 #include "love_card.h"
 #include "web_ui.h"
@@ -130,16 +131,7 @@ WebServer server(80);
 DNSServer dnsServer;
 Preferences prefs;
 
-// --- СТРАНИЦЫ КРУГЛОГО ЭКРАНА (ЛИСТАЮТСЯ КНОПКОЙ 2) ---
-enum ScreenMode {
-  SCREEN_AP_SETUP = 0,  // Первичная настройка Wi-Fi
-  SCREEN_TIMER    = 1,  // Страница 1: Таймер отношений
-  SCREEN_MESSAGES = 2,  // Страница 2: Открытка или послание из интернета
-  SCREEN_HEART_IP = 3,  // Страница 3: Статус, версия и IP-адрес сайта
-  SCREEN_WEATHER  = 4,  // Страница 4: Краткая погода + «Гулябельно ❤»
-  SCREEN_PULSE    = 5   // Всплывающее признание / ответ сердечком по Кнопке 1
-};
-
+// --- СТРАНИЦЫ КРУГЛОГО ЭКРАНА (определены в app_types.h) ---
 ScreenMode currentScreen = SCREEN_AP_SETUP;
 ScreenMode returnScreenAfterPulse = SCREEN_TIMER;
 bool screenNeedsFullRedraw = true;
@@ -167,11 +159,6 @@ bool fsReady = false;
 
 // --- ХРАНИЛИЩЕ ПОСЛЕДНИХ 5 ПОСЛАНИЙ / ОТКРЫТОК ---
 static const int MAX_MSG_HISTORY = 5;
-struct StoredMessage {
-  char text[320];
-  uint32_t epoch;
-  bool hasCard;
-};
 
 StoredMessage msgHistory[MAX_MSG_HISTORY];
 int msgHistoryCount = 0;
@@ -245,18 +232,7 @@ const char* LOVE_PHRASES[] = {
 };
 const int LOVE_PHRASES_COUNT = sizeof(LOVE_PHRASES) / sizeof(LOVE_PHRASES[0]);
 
-#ifndef IRAM_ATTR
-#define IRAM_ATTR
-#endif
-
 // --- АНТИДРЕБЕЗГ КНОПОК + АППАРАТНАЯ ЗАЩЁЛКА ПРЕРЫВАНИЙ ---
-struct DebouncedButton {
-  uint8_t pin;
-  bool rawState;
-  bool stableState;
-  unsigned long lastChangeMs;
-};
-
 DebouncedButton btn1 = { BTN_1, false, false, 0 };
 DebouncedButton btn2 = { BTN_2, false, false, 0 };
 
