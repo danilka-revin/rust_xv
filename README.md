@@ -22,7 +22,7 @@
      - **`Adafruit GFX Library`** (если попросит установить зависимости вроде `Adafruit BusIO` — нажми *Install all*).
      - **`Adafruit GC9A01A`**
 4. **Открой скетч проекта:**
-   - Открой файл **`love_gift_esp32c6/love_gift_esp32c6.ino`** в Arduino IDE (рядом в той же папке обязательно должны лежать `cyrillic_font.h`, `love_card.h` и `web_ui.h` — IDE откроет их вкладками автоматически).
+   - Открой файл **`love_gift_esp32c6/love_gift_esp32c6.ino`** в Arduino IDE (рядом в той же папке обязательно должны лежать `app_types.h`, `cyrillic_font.h`, `love_card.h` и `web_ui.h` — IDE откроет их вкладками автоматически).
 5. **Выбери плату и схему разделов (ВАЖНО для открыток и OTA!):**
    - Подключи **Seeed Studio XIAO ESP32-C6** к компьютеру кабелем USB-C *(кабель должен передавать данные, не только зарядку!)*.
    - **`Tools → Board → esp32 → XIAO_ESP32C6`**
