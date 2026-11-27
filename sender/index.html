@@ -1,0 +1,1213 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Конструктор открыток — Станция отношений</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Montserrat:wght@600;800&family=Playfair+Display:ital,wght@0,700;1,700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-1: #180e16;
+      --bg-2: #281523;
+      --card: rgba(255, 255, 255, 0.065);
+      --border: rgba(255, 125, 170, 0.22);
+      --accent: #ff3d71;
+      --accent-2: #ff7aa0;
+      --text: #fff0f6;
+      --muted: #cca0b3;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(165deg, var(--bg-1) 0%, var(--bg-2) 100%);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 16px 12px 44px;
+    }
+
+    .wrap {
+      max-width: 470px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 14px;
+    }
+    .header h1 { font-size: 19px; font-weight: 800; letter-spacing: -0.2px; }
+    .header p { font-size: 12.5px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+
+    .card {
+      background: var(--card);
+      backdrop-filter: blur(14px);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      padding: 16px 14px;
+      margin-bottom: 14px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+    }
+
+    /* Круглая сцена 240x240 */
+    .stage-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .watch-ring {
+      width: 266px;
+      height: 266px;
+      border-radius: 50%;
+      padding: 13px;
+      background: linear-gradient(145deg, #3b2433, #130b10);
+      box-shadow: 0 14px 36px rgba(0,0,0,0.55), inset 0 2px 4px rgba(255,255,255,0.14);
+      position: relative;
+      touch-action: none;
+    }
+    canvas#editorCanvas {
+      width: 240px;
+      height: 240px;
+      border-radius: 50%;
+      background: #000;
+      display: block;
+      cursor: grab;
+      touch-action: none;
+    }
+    canvas#editorCanvas:active { cursor: grabbing; }
+
+    .stage-hint {
+      font-size: 11.5px;
+      color: var(--muted);
+      margin-top: 8px;
+      text-align: center;
+    }
+
+    /* Вкладки инструментов */
+    .tool-tabs {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      margin: 14px 0 12px;
+    }
+    .tool-tab {
+      border: 1px solid rgba(255, 130, 175, 0.22);
+      background: rgba(255, 255, 255, 0.05);
+      color: #ffdbe9;
+      border-radius: 12px;
+      padding: 8px 4px;
+      font-size: 11.5px;
+      font-weight: 700;
+      cursor: pointer;
+      text-align: center;
+      transition: 0.15s;
+    }
+    .tool-tab.active {
+      background: linear-gradient(135deg, #ff3d71, #d62457);
+      border-color: #ff7ba1;
+      color: #fff;
+    }
+
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .label-sm {
+      font-size: 12px;
+      font-weight: 700;
+      color: #ffd4e4;
+      margin-bottom: 6px;
+      display: block;
+    }
+
+    .btn-sm {
+      border: 1px solid rgba(255, 135, 175, 0.34);
+      background: rgba(255, 61, 113, 0.16);
+      color: #ffe4ef;
+      border-radius: 11px;
+      padding: 8px 11px;
+      font-size: 12.5px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn-sm:hover { background: rgba(255, 61, 113, 0.3); }
+    .btn-sm.primary {
+      background: linear-gradient(135deg, #ff3d71, #d62457);
+      border-color: transparent;
+      color: #fff;
+    }
+
+    .input, textarea, select {
+      width: 100%;
+      padding: 9px 11px;
+      border-radius: 12px;
+      border: 1.5px solid rgba(255, 130, 170, 0.28);
+      background: rgba(0, 0, 0, 0.32);
+      color: #fff;
+      font-size: 13.5px;
+      font-family: inherit;
+      outline: none;
+    }
+    textarea { min-height: 58px; resize: vertical; }
+    .input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: #ff3d71;
+      cursor: pointer;
+    }
+
+    .slider-row {
+      display: grid;
+      grid-template-columns: 92px 1fr 40px;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+      font-size: 12px;
+      color: #f3c6d8;
+    }
+
+    .swatches {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .swatch {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.35);
+      cursor: pointer;
+    }
+    .swatch.active { border-color: #fff; transform: scale(1.14); }
+
+    .emoji-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 5px;
+      margin-bottom: 10px;
+    }
+    .emoji-btn {
+      font-size: 20px;
+      padding: 6px 0;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.06);
+      cursor: pointer;
+      transition: 0.12s;
+    }
+    .emoji-btn:hover { background: rgba(255,61,113,0.3); transform: scale(1.08); }
+
+    .layer-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border-radius: 11px;
+      background: rgba(0,0,0,0.28);
+      border: 1px solid rgba(255,255,255,0.1);
+      margin-bottom: 6px;
+      font-size: 12.5px;
+      cursor: pointer;
+    }
+    .layer-item.selected {
+      border-color: #ff4b7d;
+      background: rgba(255, 61, 113, 0.18);
+    }
+
+    .btn-send {
+      width: 100%;
+      border: none;
+      border-radius: 16px;
+      padding: 14px 18px;
+      font-size: 15px;
+      font-weight: 800;
+      color: #fff;
+      background: linear-gradient(135deg, var(--accent) 0%, #d42054 100%);
+      box-shadow: 0 8px 22px rgba(255, 61, 113, 0.34);
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    .btn-send:active { transform: scale(0.98); }
+    .btn-send:disabled { opacity: 0.6; cursor: wait; }
+
+    .status {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-size: 12.5px;
+      line-height: 1.45;
+      display: none;
+    }
+    .status.ok { display: block; background: rgba(34,197,94,0.16); border: 1px solid rgba(34,197,94,0.45); color: #bbf7d0; }
+    .status.err { display: block; background: rgba(244,63,94,0.18); border: 1px solid rgba(244,63,94,0.45); color: #fecdd3; }
+
+    .reply-item {
+      margin-top: 8px;
+      padding: 9px 11px;
+      background: rgba(255, 61, 113, 0.14);
+      border: 1px solid rgba(255, 117, 151, 0.3);
+      border-radius: 11px;
+      color: #ffe4ee;
+      font-size: 12.5px;
+    }
+
+    details summary { cursor: pointer; font-size: 12.5px; color: var(--muted); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <h1>🎨 Открытка на весь круглый экран</h1>
+      <p>Вставляй фото, двигай текст любым шрифтом, масштабируй эмодзи — и отправляй на 2-ю страницу её станции</p>
+    </div>
+
+    <div class="card">
+      <div class="stage-wrap">
+        <div class="watch-ring">
+          <canvas id="editorCanvas" width="240" height="240"></canvas>
+        </div>
+        <div class="stage-hint">👆 Тяни любой элемент прямо пальцем или мышкой по кругу</div>
+      </div>
+
+      <div class="tool-tabs">
+        <button type="button" class="tool-tab active" onclick="openToolTab('bg', this)">🖼 Фон/Фото</button>
+        <button type="button" class="tool-tab" onclick="openToolTab('text', this)">🔤 Текст</button>
+        <button type="button" class="tool-tab" onclick="openToolTab('emoji', this)">😍 Эмодзи</button>
+        <button type="button" class="tool-tab" onclick="openToolTab('layers', this)">📚 Слои</button>
+      </div>
+
+      <!-- ПАНЕЛЬ 1: ФОН И ФОТО -->
+      <div class="panel active" id="panel-bg">
+        <div class="row">
+          <label class="btn-sm primary" style="cursor:pointer;">
+            📷 Выбрать фото фона
+            <input type="file" id="bgPhotoInput" accept="image/*" style="display:none" onchange="onUploadBgPhoto(event)">
+          </label>
+          <button type="button" class="btn-sm" id="removeBgPhotoBtn" style="display:none;" onclick="removeBgPhoto()">✖ Убрать фото</button>
+        </div>
+
+        <div id="bgPhotoControls" style="display:none; margin-bottom:10px; padding:10px; background:rgba(0,0,0,0.22); border-radius:12px;">
+          <div class="slider-row"><span>Масштаб</span><input type="range" id="bgScale" min="0.2" max="3.5" step="0.02" value="1" oninput="updateBgPhotoProp()"><span id="bgScaleVal">1.0</span></div>
+          <div class="slider-row"><span>Поворот</span><input type="range" id="bgRot" min="-180" max="180" step="1" value="0" oninput="updateBgPhotoProp()"><span id="bgRotVal">0°</span></div>
+          <div class="slider-row"><span>Затемнение</span><input type="range" id="bgDim" min="0" max="0.8" step="0.05" value="0.2" oninput="updateBgPhotoProp()"><span id="bgDimVal">20%</span></div>
+          <div class="slider-row"><span>Размытие</span><input type="range" id="bgBlur" min="0" max="8" step="1" value="0" oninput="updateBgPhotoProp()"><span id="bgBlurVal">0</span></div>
+          <div style="font-size:11.5px; color:var(--muted);">💡 Нажми на пустое место круга и двигай фото!</div>
+        </div>
+
+        <span class="label-sm">Градиенты и цвета фона:</span>
+        <div class="swatches" id="bgGradients"></div>
+
+        <div class="row" style="margin-top:4px;">
+          <span class="label-sm" style="margin:0;">Свой цвет:</span>
+          <input type="color" id="bgCustomColor" value="#2a0d1c" onchange="setSolidBg(this.value)" style="width:36px; height:26px; border:none; background:none; cursor:pointer;">
+          <span class="label-sm" style="margin:0 0 0 8px;">Рамка:</span>
+          <select id="frameStyle" onchange="renderStage()" style="width:auto; flex:1; padding:5px 8px; font-size:12px;">
+            <option value="soft">Нежно-розовая</option>
+            <option value="gold">Золотая нить</option>
+            <option value="double">Двойное кольцо</option>
+            <option value="none">Без рамки</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- ПАНЕЛЬ 2: ТЕКСТ И ШРИФТЫ -->
+      <div class="panel" id="panel-text">
+        <div class="row">
+          <button type="button" class="btn-sm primary" onclick="addTextLayer()">+ Добавить текст</button>
+          <button type="button" class="btn-sm" onclick="centerSelected()">⌖ По центру</button>
+          <button type="button" class="btn-sm" onclick="deleteSelected()">🗑 Удалить</button>
+        </div>
+
+        <div id="textPropsBox">
+          <label class="label-sm">Текст выбранного блока:</label>
+          <textarea id="txtContent" oninput="updateSelectedText()" placeholder="Напиши послание..."></textarea>
+
+          <div class="row" style="margin-top:8px;">
+            <div style="flex:1;">
+              <label class="label-sm">Шрифт:</label>
+              <select id="txtFont" onchange="updateSelectedText()">
+                <option value="'Caveat', cursive">✍️ Романтик (Рукописный)</option>
+                <option value="'Playfair Display', Georgia, serif">✨ Классика (Serif)</option>
+                <option value="'Montserrat', sans-serif">💎 Модерн (Sans)</option>
+                <option value="Impact, 'Arial Black', sans-serif">🔥 Плакат (Жирный)</option>
+                <option value="'Courier New', monospace">💌 Записка (Машинка)</option>
+                <option value="'Trebuchet MS', sans-serif">🌸 Уютный (Округлый)</option>
+              </select>
+            </div>
+            <div>
+              <label class="label-sm">Цвет:</label>
+              <input type="color" id="txtColor" value="#ffffff" oninput="updateSelectedText()" style="width:44px; height:36px; border:none; background:none; cursor:pointer;">
+            </div>
+          </div>
+
+          <div class="swatches">
+            <div class="swatch" style="background:#ffffff" onclick="setTextColor('#ffffff')"></div>
+            <div class="swatch" style="background:#ffb6c1" onclick="setTextColor('#ffb6c1')"></div>
+            <div class="swatch" style="background:#ff3d71" onclick="setTextColor('#ff3d71')"></div>
+            <div class="swatch" style="background:#ffe58f" onclick="setTextColor('#ffe58f')"></div>
+            <div class="swatch" style="background:#55f29b" onclick="setTextColor('#55f29b')"></div>
+            <div class="swatch" style="background:#93c5fd" onclick="setTextColor('#93c5fd')"></div>
+            <div class="swatch" style="background:#180e16" onclick="setTextColor('#180e16')"></div>
+          </div>
+
+          <div class="slider-row"><span>Размер</span><input type="range" id="txtSize" min="10" max="54" step="1" value="24" oninput="updateSelectedText()"><span id="txtSizeVal">24</span></div>
+          <div class="slider-row"><span>Поворот</span><input type="range" id="txtRot" min="-180" max="180" step="1" value="0" oninput="updateSelectedText()"><span id="txtRotVal">0°</span></div>
+
+          <div class="row">
+            <label style="font-size:12px; display:flex; align-items:center; gap:5px; cursor:pointer;">
+              <input type="checkbox" id="txtShadow" checked onchange="updateSelectedText()"> Обводка/тень
+            </label>
+            <label style="font-size:12px; display:flex; align-items:center; gap:5px; cursor:pointer;">
+              <input type="checkbox" id="txtPill" onchange="updateSelectedText()"> Подложка-плашка
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- ПАНЕЛЬ 3: ЭМОДЗИ И ФОТО-СТИКЕРЫ -->
+      <div class="panel" id="panel-emoji">
+        <div class="emoji-grid" id="emojiGrid"></div>
+        <div class="row">
+          <input class="input" id="customEmojiInput" placeholder="Или вставь любой свой эмодзи..." style="flex:1;">
+          <button type="button" class="btn-sm primary" onclick="addCustomEmoji()">+ Добавить</button>
+        </div>
+        <div class="row">
+          <label class="btn-sm" style="cursor:pointer;">
+            🖼 + Фото-стикер (в кружке)
+            <input type="file" accept="image/*" style="display:none" onchange="onUploadStickerPhoto(event, 'circle')">
+          </label>
+          <label class="btn-sm" style="cursor:pointer;">
+            ❤️ + Фото в сердечке
+            <input type="file" accept="image/*" style="display:none" onchange="onUploadStickerPhoto(event, 'heart')">
+          </label>
+        </div>
+        <div id="itemTransformBox" style="padding:8px 10px; background:rgba(0,0,0,0.22); border-radius:12px;">
+          <div class="slider-row"><span>Размер</span><input type="range" id="itemSize" min="16" max="140" step="1" value="44" oninput="updateSelectedSticker()"><span id="itemSizeVal">44</span></div>
+          <div class="slider-row"><span>Поворот</span><input type="range" id="itemRot" min="-180" max="180" step="1" value="0" oninput="updateSelectedSticker()"><span id="itemRotVal">0°</span></div>
+        </div>
+      </div>
+
+      <!-- ПАНЕЛЬ 4: СЛОИ И ШАБЛОНЫ -->
+      <div class="panel" id="panel-layers">
+        <span class="label-sm">Быстрые шаблоны:</span>
+        <div class="row">
+          <button type="button" class="btn-sm" onclick="applyTemplate('morning')">☀️ Доброе утро</button>
+          <button type="button" class="btn-sm" onclick="applyTemplate('miss')">💌 Скучаю</button>
+          <button type="button" class="btn-sm" onclick="applyTemplate('night')">🌙 Спокойной ночи</button>
+          <button type="button" class="btn-sm" onclick="clearAllLayers()">🧹 Очистить</button>
+        </div>
+        <span class="label-sm">Порядок слоёв (нажми чтобы выбрать):</span>
+        <div id="layersList"></div>
+        <div class="row" style="margin-top:6px;">
+          <button type="button" class="btn-sm" onclick="moveLayer(1)">⬆ Выше</button>
+          <button type="button" class="btn-sm" onclick="moveLayer(-1)">⬇ Ниже</button>
+          <button type="button" class="btn-sm" onclick="deleteSelected()">🗑 Удалить</button>
+        </div>
+      </div>
+
+      <button type="button" class="btn-send" id="sendBtn" onclick="sendPostcard()">
+        🚀 Отправить открытку на станцию
+      </button>
+      <div class="status" id="sendStatus"></div>
+    </div>
+
+    <div class="card">
+      <strong style="color:#ffd4e4; font-size:13.5px;">🔔 Ответные сердечки со станции:</strong>
+      <p style="margin-top:4px; font-size:12px; color:var(--muted);">
+        Канал уведомлений для приложения <b>ntfy</b>: <code id="replyTopicLabel"></code>
+      </p>
+      <div id="repliesList">
+        <div class="reply-item" style="opacity:0.75;">Ожидаем нажатия Кнопки 1 на станции...</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <details>
+        <summary>⚙️ Настройка секретного канала ntfy.sh</summary>
+        <div style="margin-top:10px;">
+          <label class="label-sm" for="topicInput">Секретный ключ (совпадает с NTFY_TOPIC в прошивке):</label>
+          <input class="input" id="topicInput" type="text" value="love_station_xv_7d92a4c8e1" onchange="saveTopic()" style="font-family:monospace;">
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <script>
+    const DEFAULT_TOPIC = 'love_station_xv_7d92a4c8e1';
+    const IS_LOCAL_PREVIEW = window.location.pathname.startsWith('/sender');
+
+    const canvas = document.getElementById('editorCanvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+    const BG_PRESETS = [
+      { name: 'Ночь любви', c1: '#2d0a1e', c2: '#090308' },
+      { name: 'Алый закат', c1: '#ff4b72', c2: '#560d2d' },
+      { name: 'Космос', c1: '#1d1b4b', c2: '#060714' },
+      { name: 'Розовый шёлк', c1: '#ff9ebb', c2: '#b83264' },
+      { name: 'Тёплое золото', c1: '#f59e0b', c2: '#7c2d12' },
+      { name: 'Аметист', c1: '#7e22ce', c2: '#1e0b36' },
+      { name: 'Мятная нежность', c1: '#0f766e', c2: '#062024' },
+      { name: 'Чёрный OLED', c1: '#000000', c2: '#000000' }
+    ];
+
+    const EMOJIS = ['❤️','🥰','😘','💕','💖','✨','🌸','🌹','🍓','🐻','🌙','🔥','💌','💍','🥂','🧸','☀️','🦋','🥹','🫶','💋'];
+
+    let bgState = {
+      type: 'grad',
+      c1: '#2d0a1e',
+      c2: '#090308',
+      photoImg: null,
+      px: 120,
+      py: 120,
+      scale: 1.0,
+      rot: 0,
+      dim: 0.2,
+      blur: 0
+    };
+
+    // Слои: { id, kind: 'text'|'emoji'|'photo', x, y, rot, ... }
+    let layers = [];
+    let selectedId = null;
+    let nextLayerId = 1;
+    let draggingMode = null; // 'layer' | 'bg'
+    let dragStart = { x: 0, y: 0, ox: 0, oy: 0 };
+    let showGuides = false;
+
+    function openToolTab(name, btn) {
+      document.querySelectorAll('.tool-tab').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+      document.getElementById('panel-' + name).classList.add('active');
+      if (name === 'layers') refreshLayersList();
+    }
+
+    function initUi() {
+      const gWrap = document.getElementById('bgGradients');
+      BG_PRESETS.forEach((p, idx) => {
+        const d = document.createElement('div');
+        d.className = 'swatch' + (idx === 0 ? ' active' : '');
+        d.style.background = `linear-gradient(135deg, ${p.c1}, ${p.c2})`;
+        d.title = p.name;
+        d.onclick = () => {
+          document.querySelectorAll('#bgGradients .swatch').forEach(s => s.classList.remove('active'));
+          d.classList.add('active');
+          bgState.type = 'grad';
+          bgState.c1 = p.c1;
+          bgState.c2 = p.c2;
+          renderStage();
+        };
+        gWrap.appendChild(d);
+      });
+
+      const eGrid = document.getElementById('emojiGrid');
+      EMOJIS.forEach(em => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'emoji-btn';
+        b.textContent = em;
+        b.onclick = () => addEmojiLayer(em);
+        eGrid.appendChild(b);
+      });
+
+      applyTemplate('morning');
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(() => renderStage());
+      }
+    }
+
+    function setSolidBg(hex) {
+      bgState.type = 'solid';
+      bgState.c1 = hex;
+      bgState.c2 = hex;
+      renderStage();
+    }
+
+    function onUploadBgPhoto(ev) {
+      const file = ev.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          bgState.photoImg = img;
+          const minSide = Math.min(img.width, img.height);
+          bgState.scale = 240 / minSide;
+          bgState.px = 120;
+          bgState.py = 120;
+          bgState.rot = 0;
+          document.getElementById('bgScale').value = bgState.scale.toFixed(2);
+          document.getElementById('bgScaleVal').textContent = bgState.scale.toFixed(1);
+          document.getElementById('bgRot').value = 0;
+          document.getElementById('bgRotVal').textContent = '0°';
+          document.getElementById('bgPhotoControls').style.display = 'block';
+          document.getElementById('removeBgPhotoBtn').style.display = 'inline-block';
+          renderStage();
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function removeBgPhoto() {
+      bgState.photoImg = null;
+      document.getElementById('bgPhotoControls').style.display = 'none';
+      document.getElementById('removeBgPhotoBtn').style.display = 'none';
+      renderStage();
+    }
+
+    function updateBgPhotoProp() {
+      bgState.scale = parseFloat(document.getElementById('bgScale').value);
+      bgState.rot = parseFloat(document.getElementById('bgRot').value);
+      bgState.dim = parseFloat(document.getElementById('bgDim').value);
+      bgState.blur = parseFloat(document.getElementById('bgBlur').value);
+      document.getElementById('bgScaleVal').textContent = bgState.scale.toFixed(1);
+      document.getElementById('bgRotVal').textContent = bgState.rot + '°';
+      document.getElementById('bgDimVal').textContent = Math.round(bgState.dim * 100) + '%';
+      document.getElementById('bgBlurVal').textContent = bgState.blur;
+      renderStage();
+    }
+
+    function addTextLayer(text = 'Люблю тебя!', opts = {}) {
+      const id = nextLayerId++;
+      const layer = {
+        id,
+        kind: 'text',
+        text,
+        x: opts.x ?? 120,
+        y: opts.y ?? 120,
+        size: opts.size ?? 26,
+        rot: opts.rot ?? 0,
+        font: opts.font ?? "'Caveat', cursive",
+        color: opts.color ?? '#ffffff',
+        shadow: opts.shadow ?? true,
+        pill: opts.pill ?? false
+      };
+      layers.push(layer);
+      selectLayer(id);
+      renderStage();
+    }
+
+    function addEmojiLayer(emoji, opts = {}) {
+      const id = nextLayerId++;
+      layers.push({
+        id,
+        kind: 'emoji',
+        text: emoji,
+        x: opts.x ?? (90 + Math.random() * 60),
+        y: opts.y ?? (90 + Math.random() * 60),
+        size: opts.size ?? 44,
+        rot: opts.rot ?? 0
+      });
+      selectLayer(id);
+      renderStage();
+    }
+
+    function addCustomEmoji() {
+      const val = document.getElementById('customEmojiInput').value.trim();
+      if (!val) return;
+      addEmojiLayer(val);
+      document.getElementById('customEmojiInput').value = '';
+    }
+
+    function onUploadStickerPhoto(ev, shape) {
+      const file = ev.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const id = nextLayerId++;
+          layers.push({
+            id,
+            kind: 'photo',
+            img,
+            shape,
+            x: 120,
+            y: 120,
+            size: 86,
+            rot: 0
+          });
+          selectLayer(id);
+          renderStage();
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function getSelected() {
+      return layers.find(l => l.id === selectedId) || null;
+    }
+
+    function selectLayer(id) {
+      selectedId = id;
+      const l = getSelected();
+      if (l && l.kind === 'text') {
+        document.getElementById('txtContent').value = l.text;
+        document.getElementById('txtFont').value = l.font;
+        document.getElementById('txtColor').value = l.color;
+        document.getElementById('txtSize').value = l.size;
+        document.getElementById('txtSizeVal').textContent = l.size;
+        document.getElementById('txtRot').value = l.rot;
+        document.getElementById('txtRotVal').textContent = l.rot + '°';
+        document.getElementById('txtShadow').checked = l.shadow;
+        document.getElementById('txtPill').checked = l.pill;
+      } else if (l) {
+        document.getElementById('itemSize').value = l.size;
+        document.getElementById('itemSizeVal').textContent = l.size;
+        document.getElementById('itemRot').value = l.rot;
+        document.getElementById('itemRotVal').textContent = l.rot + '°';
+      }
+      refreshLayersList();
+    }
+
+    function updateSelectedText() {
+      let l = getSelected();
+      if (!l || l.kind !== 'text') {
+        l = layers.slice().reverse().find(x => x.kind === 'text');
+        if (!l) return;
+        selectedId = l.id;
+      }
+      l.text = document.getElementById('txtContent').value;
+      l.font = document.getElementById('txtFont').value;
+      l.color = document.getElementById('txtColor').value;
+      l.size = parseInt(document.getElementById('txtSize').value, 10);
+      l.rot = parseInt(document.getElementById('txtRot').value, 10);
+      l.shadow = document.getElementById('txtShadow').checked;
+      l.pill = document.getElementById('txtPill').checked;
+      document.getElementById('txtSizeVal').textContent = l.size;
+      document.getElementById('txtRotVal').textContent = l.rot + '°';
+      renderStage();
+    }
+
+    function setTextColor(hex) {
+      document.getElementById('txtColor').value = hex;
+      updateSelectedText();
+    }
+
+    function updateSelectedSticker() {
+      const l = getSelected();
+      if (!l || l.kind === 'text') return;
+      l.size = parseInt(document.getElementById('itemSize').value, 10);
+      l.rot = parseInt(document.getElementById('itemRot').value, 10);
+      document.getElementById('itemSizeVal').textContent = l.size;
+      document.getElementById('itemRotVal').textContent = l.rot + '°';
+      renderStage();
+    }
+
+    function centerSelected() {
+      const l = getSelected();
+      if (!l) return;
+      l.x = 120; l.y = 120;
+      renderStage();
+    }
+
+    function deleteSelected() {
+      if (selectedId == null) return;
+      layers = layers.filter(l => l.id !== selectedId);
+      selectedId = layers.length ? layers[layers.length - 1].id : null;
+      refreshLayersList();
+      renderStage();
+    }
+
+    function moveLayer(dir) {
+      const idx = layers.findIndex(l => l.id === selectedId);
+      if (idx < 0) return;
+      const nIdx = idx + dir;
+      if (nIdx < 0 || nIdx >= layers.length) return;
+      const tmp = layers[idx];
+      layers[idx] = layers[nIdx];
+      layers[nIdx] = tmp;
+      refreshLayersList();
+      renderStage();
+    }
+
+    function refreshLayersList() {
+      const box = document.getElementById('layersList');
+      if (!box) return;
+      if (!layers.length) {
+        box.innerHTML = '<div style="font-size:12px; color:var(--muted);">Пока нет слоёв</div>';
+        return;
+      }
+      box.innerHTML = layers.slice().reverse().map(l => {
+        const icon = l.kind === 'text' ? '🔤' : (l.kind === 'emoji' ? l.text : '🖼');
+        const label = l.kind === 'text' ? (l.text || '(пустой текст)') : (l.kind === 'emoji' ? 'Эмодзи' : 'Фото-стикер');
+        const sel = l.id === selectedId ? ' selected' : '';
+        return `<div class="layer-item${sel}" onclick="selectLayer(${l.id}); renderStage();"><span>${icon} ${label.slice(0,22)}</span><span style="opacity:0.6;">#${l.id}</span></div>`;
+      }).join('');
+    }
+
+    function clearAllLayers() {
+      layers = [];
+      selectedId = null;
+      refreshLayersList();
+      renderStage();
+    }
+
+    function applyTemplate(name) {
+      layers = [];
+      selectedId = null;
+      if (name === 'morning') {
+        bgState.c1 = '#3b0c24'; bgState.c2 = '#11040b'; bgState.type = 'grad';
+        addEmojiLayer('☀️', { x: 120, y: 48, size: 38, rot: 0 });
+        addTextLayer('Доброе утро,\nсолнышко!', { x: 120, y: 118, size: 30, font: "'Caveat', cursive", color: '#ffe58f', rot: -3 });
+        addEmojiLayer('❤️', { x: 120, y: 185, size: 30, rot: 0 });
+      } else if (name === 'miss') {
+        bgState.c1 = '#ff4b72'; bgState.c2 = '#450a24'; bgState.type = 'grad';
+        addEmojiLayer('💌', { x: 120, y: 52, size: 40, rot: -8 });
+        addTextLayer('ОЧЕНЬ\nСКУЧАЮ', { x: 120, y: 122, size: 28, font: "'Montserrat', sans-serif", color: '#ffffff', rot: 0 });
+        addTextLayer('мы скоро увидимся', { x: 120, y: 178, size: 16, font: "'Playfair Display', Georgia, serif", color: '#ffd6e6', rot: 0 });
+      } else if (name === 'night') {
+        bgState.c1 = '#1e1b4b'; bgState.c2 = '#050611'; bgState.type = 'grad';
+        addEmojiLayer('🌙', { x: 86, y: 56, size: 36, rot: -10 });
+        addEmojiLayer('✨', { x: 152, y: 62, size: 26, rot: 12 });
+        addTextLayer('Сладких снов,\nобнимаю крепко', { x: 120, y: 126, size: 26, font: "'Caveat', cursive", color: '#e0e7ff', rot: 0 });
+        addEmojiLayer('🧸', { x: 120, y: 184, size: 32, rot: 0 });
+      }
+      renderStage();
+    }
+
+    function drawHeartPath(c, size) {
+      const r = size / 2;
+      c.beginPath();
+      c.moveTo(0, r * 0.85);
+      c.bezierCurveTo(-r * 1.3, r * 0.1, -r * 1.15, -r * 0.95, 0, -r * 0.35);
+      c.bezierCurveTo(r * 1.15, -r * 0.95, r * 1.3, r * 0.1, 0, r * 0.85);
+      c.closePath();
+    }
+
+    function renderStage(exportMode = false) {
+      ctx.clearRect(0, 0, 240, 240);
+
+      // Маска идеального круга
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(120, 120, 118.5, 0, Math.PI * 2);
+      ctx.clip();
+
+      // 1. Фон (цвет / градиент)
+      if (bgState.type === 'solid') {
+        ctx.fillStyle = bgState.c1;
+        ctx.fillRect(0, 0, 240, 240);
+      } else {
+        const g = ctx.createRadialGradient(120, 90, 10, 120, 120, 140);
+        g.addColorStop(0, bgState.c1);
+        g.addColorStop(1, bgState.c2);
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, 240, 240);
+      }
+
+      // 2. Фото фона
+      if (bgState.photoImg) {
+        ctx.save();
+        ctx.translate(bgState.px, bgState.py);
+        ctx.rotate((bgState.rot * Math.PI) / 180);
+        ctx.scale(bgState.scale, bgState.scale);
+        if (bgState.blur > 0) ctx.filter = `blur(${bgState.blur}px)`;
+        ctx.drawImage(bgState.photoImg, -bgState.photoImg.width / 2, -bgState.photoImg.height / 2);
+        ctx.restore();
+        ctx.filter = 'none';
+
+        if (bgState.dim > 0) {
+          ctx.fillStyle = `rgba(0,0,0,${bgState.dim})`;
+          ctx.fillRect(0, 0, 240, 240);
+        }
+      }
+
+      // 3. Слои (фото-стикеры, эмодзи, текст)
+      layers.forEach(l => {
+        ctx.save();
+        ctx.translate(l.x, l.y);
+        ctx.rotate((l.rot * Math.PI) / 180);
+
+        if (l.kind === 'photo' && l.img) {
+          const s = l.size;
+          ctx.save();
+          if (l.shape === 'heart') {
+            drawHeartPath(ctx, s);
+          } else {
+            ctx.beginPath();
+            ctx.arc(0, 0, s / 2, 0, Math.PI * 2);
+          }
+          ctx.clip();
+          const aspect = l.img.width / l.img.height;
+          let dw = s, dh = s;
+          if (aspect > 1) dw = s * aspect; else dh = s / aspect;
+          ctx.drawImage(l.img, -dw / 2, -dh / 2, dw, dh);
+          ctx.restore();
+
+          ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+          ctx.lineWidth = 2;
+          if (l.shape === 'heart') drawHeartPath(ctx, s);
+          else { ctx.beginPath(); ctx.arc(0, 0, s / 2, 0, Math.PI * 2); }
+          ctx.stroke();
+        } else if (l.kind === 'emoji') {
+          ctx.font = `${l.size}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(l.text, 0, 2);
+        } else if (l.kind === 'text') {
+          const lines = (l.text || '').split('\n');
+          ctx.font = `700 ${l.size}px ${l.font}`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          const lineH = l.size * 1.12;
+          const totalH = lines.length * lineH;
+
+          if (l.pill) {
+            let maxW = 0;
+            lines.forEach(ln => { maxW = Math.max(maxW, ctx.measureText(ln).width); });
+            ctx.fillStyle = 'rgba(18, 8, 14, 0.72)';
+            ctx.beginPath();
+            ctx.roundRect(-maxW / 2 - 10, -totalH / 2 - 4, maxW + 20, totalH + 8, 10);
+            ctx.fill();
+          }
+
+          lines.forEach((ln, idx) => {
+            const ly = -totalH / 2 + (idx + 0.5) * lineH;
+            if (l.shadow) {
+              ctx.lineWidth = Math.max(2.5, l.size * 0.14);
+              ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+              ctx.lineJoin = 'round';
+              ctx.strokeText(ln, 0, ly);
+            }
+            ctx.fillStyle = l.color;
+            ctx.fillText(ln, 0, ly);
+          });
+        }
+
+        // Рамка выделения в режиме редактора
+        if (!exportMode && l.id === selectedId) {
+          ctx.strokeStyle = 'rgba(255, 229, 143, 0.9)';
+          ctx.lineWidth = 1.2;
+          ctx.setLineDash([4, 3]);
+          const boxR = Math.max(22, (l.size || 30) * 0.85);
+          ctx.strokeRect(-boxR, -boxR * 0.65, boxR * 2, boxR * 1.3);
+          ctx.setLineDash([]);
+        }
+        ctx.restore();
+      });
+
+      // 4. Декоративная рамка по кругу
+      const fStyle = document.getElementById('frameStyle').value;
+      if (fStyle !== 'none') {
+        ctx.beginPath();
+        ctx.arc(120, 120, 117.5, 0, Math.PI * 2);
+        ctx.strokeStyle = fStyle === 'gold' ? 'rgba(255, 229, 143, 0.75)' : 'rgba(255, 110, 155, 0.65)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        if (fStyle === 'double') {
+          ctx.beginPath();
+          ctx.arc(120, 120, 113, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(255, 190, 215, 0.45)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+      }
+
+      // Направляющие по центру при перетаскивании
+      if (!exportMode && showGuides) {
+        ctx.strokeStyle = 'rgba(255, 229, 143, 0.45)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(120, 0); ctx.lineTo(120, 240);
+        ctx.moveTo(0, 120); ctx.lineTo(240, 120);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // Перетаскивание слоёв и фото прямо по круглому экрану
+    function getPointerPos(ev) {
+      const rect = canvas.getBoundingClientRect();
+      const pt = ev.touches ? ev.touches[0] : ev;
+      return {
+        x: ((pt.clientX - rect.left) / rect.width) * 240,
+        y: ((pt.clientY - rect.top) / rect.height) * 240
+      };
+    }
+
+    function hitTestLayer(x, y) {
+      for (let i = layers.length - 1; i >= 0; i--) {
+        const l = layers[i];
+        const hitR = l.kind === 'text' ? Math.max(26, l.size * 1.4) : Math.max(22, l.size * 0.65);
+        if (Math.abs(x - l.x) <= hitR && Math.abs(y - l.y) <= hitR * 0.85) {
+          return l;
+        }
+      }
+      return null;
+    }
+
+    function onPointerDown(ev) {
+      ev.preventDefault();
+      const pos = getPointerPos(ev);
+      const hit = hitTestLayer(pos.x, pos.y);
+      if (hit) {
+        selectLayer(hit.id);
+        draggingMode = 'layer';
+        dragStart = { x: pos.x, y: pos.y, ox: hit.x, oy: hit.y };
+        if (hit.kind === 'text') openToolTab('text', document.querySelectorAll('.tool-tab')[1]);
+        else openToolTab('emoji', document.querySelectorAll('.tool-tab')[2]);
+      } else if (bgState.photoImg) {
+        draggingMode = 'bg';
+        dragStart = { x: pos.x, y: pos.y, ox: bgState.px, oy: bgState.py };
+      } else {
+        selectedId = null;
+      }
+      renderStage();
+    }
+
+    function onPointerMove(ev) {
+      if (!draggingMode) return;
+      ev.preventDefault();
+      const pos = getPointerPos(ev);
+      let nx = dragStart.ox + (pos.x - dragStart.x);
+      let ny = dragStart.oy + (pos.y - dragStart.y);
+
+      if (draggingMode === 'layer') {
+        const l = getSelected();
+        if (!l) return;
+        if (Math.abs(nx - 120) < 5) nx = 120;
+        if (Math.abs(ny - 120) < 5) ny = 120;
+        l.x = nx; l.y = ny;
+        showGuides = (nx === 120 || ny === 120);
+      } else if (draggingMode === 'bg') {
+        bgState.px = nx; bgState.py = ny;
+      }
+      renderStage();
+    }
+
+    function onPointerUp() {
+      draggingMode = null;
+      showGuides = false;
+      renderStage();
+    }
+
+    canvas.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('mousemove', onPointerMove);
+    window.addEventListener('mouseup', onPointerUp);
+    canvas.addEventListener('touchstart', onPointerDown, { passive: false });
+    window.addEventListener('touchmove', onPointerMove, { passive: false });
+    window.addEventListener('touchend', onPointerUp);
+
+    // Кодирование 240x240 холста в формат LVC1 (15 QOI565 полос по 16 строк + UTF-8 подпись)
+    function encodeCanvasToLvc(captionText) {
+      renderStage(true);
+      const imgData = ctx.getImageData(0, 0, 240, 240).data;
+      renderStage(false);
+
+      const capBytes = new TextEncoder().encode((captionText || 'Открытка для тебя ❤️').slice(0, 220));
+      const stripChunks = [];
+
+      for (let s = 0; s < 15; s++) {
+        const out = [];
+        const index = new Uint16Array(64);
+        let prev = 0;
+        let run = 0;
+        const yStart = s * 16;
+
+        for (let r = 0; r < 16; r++) {
+          const y = yStart + r;
+          const dy = y - 120;
+          for (let x = 0; x < 240; x++) {
+            const dx = x - 120;
+            let px = 0;
+            if (dx * dx + dy * dy <= 14161) {
+              const o = (y * 240 + x) * 4;
+              const r5 = imgData[o] >> 3;
+              const g6 = imgData[o + 1] >> 2;
+              const b5 = imgData[o + 2] >> 3;
+              px = (r5 << 11) | (g6 << 5) | b5;
+            }
+
+            if (px === prev) {
+              run++;
+              if (run === 62 || (r === 15 && x === 239)) {
+                out.push(0x40 | (run - 1));
+                run = 0;
+              }
+            } else {
+              if (run > 0) {
+                out.push(0x40 | (run - 1));
+                run = 0;
+              }
+              const r5 = (px >> 11) & 0x1F;
+              const g6 = (px >> 5)  & 0x3F;
+              const b5 =  px        & 0x1F;
+              const h = (r5 * 3 + g6 * 5 + b5 * 7) & 63;
+
+              if (index[h] === px) {
+                out.push(h);
+              } else {
+                index[h] = px;
+                const pr = (prev >> 11) & 0x1F;
+                const pg = (prev >> 5)  & 0x3F;
+                const pb =  prev        & 0x1F;
+                const dr = r5 - pr;
+                const dg = g6 - pg;
+                const db = b5 - pb;
+                if (dr >= -2 && dr <= 1 && dg >= -2 && dg <= 1 && db >= -2 && db <= 1) {
+                  out.push(0x80 | ((dr + 2) << 4) | ((dg + 2) << 2) | (db + 2));
+                } else {
+                  const dg2 = Math.trunc(dg / 2);
+                  const dr_dg = dr - dg2;
+                  const db_dg = db - dg2;
+                  if (dg >= -16 && dg <= 15 && dr_dg >= -8 && dr_dg <= 7 && db_dg >= -8 && db_dg <= 7) {
+                    out.push(0xC0 | (dg + 16));
+                    out.push(((dr_dg + 8) << 4) | (db_dg + 8));
+                  } else {
+                    out.push(0xFE, (px >> 8) & 0xFF, px & 0xFF);
+                  }
+                }
+              }
+              prev = px;
+            }
+          }
+        }
+        stripChunks.push(new Uint8Array(out));
+      }
+
+      const bodyLen = stripChunks.reduce((a, b) => a + b.length, 0);
+      const totalLen = 70 + capBytes.length + bodyLen;
+      const result = new Uint8Array(totalLen);
+      const dv = new DataView(result.buffer);
+
+      result[0] = 76; result[1] = 86; result[2] = 67; result[3] = 49; // "LVC1"
+      dv.setUint16(4, 240, true);
+      dv.setUint16(6, 240, true);
+      dv.setUint16(8, capBytes.length, true);
+
+      let pos = 70;
+      result.set(capBytes, pos);
+      pos += capBytes.length;
+
+      for (let i = 0; i < 15; i++) {
+        dv.setUint32(10 + i * 4, stripChunks[i].length, true);
+        result.set(stripChunks[i], pos);
+        pos += stripChunks[i].length;
+      }
+      return result;
+    }
+
+    function buildCaptionSummary() {
+      const texts = layers.filter(l => l.kind === 'text' && l.text.trim()).map(l => l.text.trim().replace(/\n+/g, ' '));
+      if (texts.length) return texts.join(' • ');
+      const emojis = layers.filter(l => l.kind === 'emoji').map(l => l.text);
+      if (emojis.length) return 'Открытка ' + emojis.join('');
+      return bgState.photoImg ? 'Фото-открытка ❤️' : 'Открытка для тебя ❤️';
+    }
+
+    async function sendPostcard() {
+      const btn = document.getElementById('sendBtn');
+      const statusBox = document.getElementById('sendStatus');
+      statusBox.className = 'status';
+      btn.disabled = true;
+      btn.textContent = 'Упаковываем открытку...';
+
+      try {
+        const caption = buildCaptionSummary();
+        const lvcBytes = encodeCanvasToLvc(caption);
+        const kb = (lvcBytes.length / 1024).toFixed(1);
+        btn.textContent = `Отправляем (${kb} КБ)...`;
+
+        if (IS_LOCAL_PREVIEW) {
+          const res = await fetch('/api/sim_push_card', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/octet-stream' },
+            body: lvcBytes
+          });
+          if (!res.ok) throw new Error('preview err');
+        } else {
+          const res = await fetch('https://ntfy.sh/' + encodeURIComponent(getTopic()), {
+            method: 'PUT',
+            headers: {
+              'Filename': 'card.lvc',
+              'Content-Type': 'application/octet-stream'
+            },
+            body: lvcBytes
+          });
+          if (!res.ok) throw new Error('ntfy status ' + res.status);
+        }
+
+        statusBox.className = 'status ok';
+        statusBox.textContent = `Отправлено (${kb} КБ)! Через пару секунд на 2-й странице станции плавно откроется твоя открытка.`;
+      } catch (e) {
+        statusBox.className = 'status err';
+        statusBox.textContent = 'Ошибка отправки. Проверь подключение к интернету.';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🚀 Отправить открытку на станцию';
+      }
+    }
+
+    function getTopic() {
+      return (document.getElementById('topicInput').value || DEFAULT_TOPIC).trim();
+    }
+
+    function saveTopic() {
+      const t = getTopic();
+      try { localStorage.setItem('love_station_topic', t); } catch (e) {}
+      document.getElementById('replyTopicLabel').textContent = t + '_reply';
+    }
+
+    async function pollReplies() {
+      if (IS_LOCAL_PREVIEW) {
+        try {
+          const res = await fetch('/api/sim_state');
+          const d = await res.json();
+          if (Array.isArray(d.replies) && d.replies.length > 0) {
+            document.getElementById('repliesList').innerHTML = d.replies.slice().reverse().map(r =>
+              `<div class="reply-item">❤️ ${r.text} <span style="opacity:0.7;font-size:11px;">(${r.time})</span></div>`
+            ).join('');
+          }
+        } catch (e) {}
+        return;
+      }
+
+      try {
+        const es = new EventSource('https://ntfy.sh/' + encodeURIComponent(getTopic() + '_reply') + '/sse');
+        es.onmessage = (ev) => {
+          try {
+            const data = JSON.parse(ev.data);
+            if (data.event === 'message' && data.message) {
+              const box = document.getElementById('repliesList');
+              if (box.textContent.includes('Ожидаем')) box.innerHTML = '';
+              const tStr = new Date((data.time || Date.now()/1000) * 1000).toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
+              const div = document.createElement('div');
+              div.className = 'reply-item';
+              div.innerHTML = `❤️ ${data.message} <span style="opacity:0.7;font-size:11px;">(${tStr})</span>`;
+              box.prepend(div);
+            }
+          } catch (e) {}
+        };
+      } catch (e) {}
+    }
+
+    (function boot() {
+      try {
+        const saved = localStorage.getItem('love_station_topic');
+        if (saved) document.getElementById('topicInput').value = saved;
+      } catch (e) {}
+      saveTopic();
+      initUi();
+      if (IS_LOCAL_PREVIEW) {
+        setInterval(pollReplies, 1000);
+        pollReplies();
+      } else {
+        pollReplies();
+      }
+    })();
+  </script>
+</body>
+</html>

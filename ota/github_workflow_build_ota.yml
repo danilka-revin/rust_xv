@@ -1,0 +1,87 @@
+name: Build ESP32-C6 OTA Firmware
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'love_gift_esp32c6/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-ota:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Arduino CLI
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
+          arduino-cli config init
+          arduino-cli config set board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32
+          arduino-cli lib install "Adafruit GFX Library" "Adafruit GC9A01A"
+
+      - name: Compile firmware for XIAO ESP32-C6
+        run: |
+          arduino-cli compile \
+            --fqbn esp32:esp32:XIAO_ESP32C6 \
+            --output-dir build_out \
+            love_gift_esp32c6
+
+      - name: Update ota/firmware.bin and ota/version.json
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          python3 - << 'EOF'
+          import json, os, re, shutil, sys
+
+          with open("love_gift_esp32c6/love_gift_esp32c6.ino", "r", encoding="utf-8") as f:
+              code = f.read()
+
+          m = re.search(r'#define\s+FIRMWARE_VERSION\s+"([^"]+)"', code)
+          if not m:
+              print("FIRMWARE_VERSION not found!")
+              sys.exit(1)
+          ver = m.group(1).strip()
+
+          src_bin = "build_out/love_gift_esp32c6.ino.bin"
+          with open(src_bin, "rb") as bf:
+              if bf.read(1) != b"\xe9":
+                  print("Invalid ESP32 app binary header!")
+                  sys.exit(1)
+
+          os.makedirs("ota", exist_ok=True)
+          shutil.copy2(src_bin, "ota/firmware.bin")
+
+          repo = os.environ["REPO"]
+          manifest = {
+              "version": ver,
+              "bin_url": f"https://raw.githubusercontent.com/{repo}/main/ota/firmware.bin",
+              "notes": f"Auto-built firmware v{ver}"
+          }
+          with open("ota/version.json", "w", encoding="utf-8") as vf:
+              json.dump(manifest, vf, ensure_ascii=False, indent=2)
+              vf.write("\n")
+
+          print(f"Prepared OTA v{ver} for {repo}")
+          EOF
+
+      - name: Commit OTA artifacts to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ota/firmware.bin ota/version.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(ota): publish compiled firmware [skip ci]"
+            git push origin HEAD:main
+          else
+            echo "OTA files unchanged"
+          fi
