@@ -21,7 +21,7 @@
 #include "web_ui.h"
 
 // --- ВЕРСИЯ ПРОШИВКИ И GITHUB АВТООБНОВЛЕНИЕ (OTA) ---
-#define FIRMWARE_VERSION "1.3.6"
+#define FIRMWARE_VERSION "1.3.7"
 
 static const char* OTA_VERSION_URL =
   "https://raw.githubusercontent.com/danilka-revin/rust_xv/main/ota/version.json";
@@ -235,11 +235,20 @@ int msgHistoryCount = 0;
 char lastNtfyId[32] = "";
 volatile bool unreadMessage = false;
 
+char plainTextMsg[320] = "";
+uint32_t plainTextEpoch = 0;
+volatile bool unreadTextMsg = false;
+
 volatile bool incomingMsgPendingApply = false;
 char pendingMsgText[320] = "";
 uint32_t pendingMsgEpoch = 0;
 char pendingMsgId[32] = "";
 bool pendingMsgHasCard = false;
+
+volatile bool incomingTextPendingApply = false;
+char pendingPlainText[320] = "";
+uint32_t pendingPlainEpoch = 0;
+char pendingPlainId[32] = "";
 
 // Вертикальный авто-скролл текстовых сообщений (если пришло без картинки)
 static const int MAX_WRAPPED_LINES = 24;
@@ -536,10 +545,8 @@ int wrapUtf8ToLines(const char* src, int maxCharsPerLine, char outLines[][80], i
   return lineIdx;
 }
 
-void prepareWrappedCurrentMessage() {
-  const char* txt = (msgHistoryCount > 0 && msgHistory[0].text[0] != '\0')
-                    ? msgHistory[0].text
-                    : "—";
+void prepareWrappedText(const char* txt) {
+  if (!txt || txt[0] == '\0') txt = "—";
 
   int tryCount = wrapUtf8ToLines(txt, 14, wrappedLines, MAX_WRAPPED_LINES);
   if (tryCount <= 3 && utf8CharCount(txt) <= 40) {
@@ -564,6 +571,14 @@ bool hasActiveCard0() {
   return fsReady && msgHistoryCount > 0 && msgHistory[0].hasCard && LittleFS.exists("/card0.lvc");
 }
 
+void saveLastNtfyId(const char* msgId) {
+  if (msgId && msgId[0] != '\0') {
+    strncpy(lastNtfyId, msgId, sizeof(lastNtfyId) - 1);
+    lastNtfyId[sizeof(lastNtfyId) - 1] = '\0';
+    prefs.putString("lastMsgId", String(lastNtfyId));
+  }
+}
+
 void loadSavedMessages() {
   msgHistoryCount = prefs.getInt("msgCount", 0);
   if (msgHistoryCount < 0) msgHistoryCount = 0;
@@ -572,6 +587,11 @@ void loadSavedMessages() {
   String lid = prefs.getString("lastMsgId", "");
   strncpy(lastNtfyId, lid.c_str(), sizeof(lastNtfyId) - 1);
   lastNtfyId[sizeof(lastNtfyId) - 1] = '\0';
+
+  String tm = prefs.getString("tmsg", "");
+  strncpy(plainTextMsg, tm.c_str(), sizeof(plainTextMsg) - 1);
+  plainTextMsg[sizeof(plainTextMsg) - 1] = '\0';
+  plainTextEpoch = prefs.getUInt("tmtm", 0);
 
   for (int i = 0; i < msgHistoryCount; i++) {
     char kTxt[12], kTm[12], kCrd[12];
@@ -591,6 +611,20 @@ void loadSavedMessages() {
     }
   }
 
+  msgNeedsRewrap = true;
+}
+
+void savePlainTextMessage(const char* text, uint32_t epoch, const char* msgId) {
+  if (!text || text[0] == '\0') return;
+  strncpy(plainTextMsg, text, sizeof(plainTextMsg) - 1);
+  plainTextMsg[sizeof(plainTextMsg) - 1] = '\0';
+  plainTextEpoch = (epoch > 1700000000UL) ? epoch : getCurrentUtcEpoch();
+
+  prefs.putString("tmsg", String(plainTextMsg));
+  prefs.putUInt("tmtm", plainTextEpoch);
+  saveLastNtfyId(msgId);
+
+  unreadTextMsg = true;
   msgNeedsRewrap = true;
 }
 
@@ -634,11 +668,7 @@ void pushNewMessageToHistory(const char* text, uint32_t epoch, const char* msgId
     }
   }
 
-  if (msgId && msgId[0] != '\0') {
-    strncpy(lastNtfyId, msgId, sizeof(lastNtfyId) - 1);
-    lastNtfyId[sizeof(lastNtfyId) - 1] = '\0';
-    prefs.putString("lastMsgId", String(lastNtfyId));
-  }
+  saveLastNtfyId(msgId);
 
   prefs.putInt("msgCount", msgHistoryCount);
   for (int i = 0; i < msgHistoryCount; i++) {
@@ -928,24 +958,34 @@ public:
   char* lineBuf;
   size_t lineCap;
   size_t lineLen = 0;
-  char* newestId;
-  size_t idCap;
-  char* newestText;
-  size_t textCap;
+  char* newestCardId;
+  size_t cardIdCap;
+  char* newestCardText;
+  size_t cardTextCap;
   char* newestAttachUrl;
   size_t attachCap;
-  uint32_t &newestTime;
+  uint32_t &newestCardTime;
+  char* newestPlainId;
+  size_t plainIdCap;
+  char* newestPlainText;
+  size_t plainTextCap;
+  uint32_t &newestPlainTime;
+  bool &lastWasCard;
 
   NtfyLineStream(char* lb, size_t lc,
-                 char* nId, size_t idC,
-                 char* nTxt, size_t txtC,
-                 char* nAtt, size_t attC,
-                 uint32_t &nTime)
+                 char* cId, size_t cIdC, char* cTxt, size_t cTxtC,
+                 char* nAtt, size_t attC, uint32_t &cTime,
+                 char* pId, size_t pIdC, char* pTxt, size_t pTxtC,
+                 uint32_t &pTime, bool &lastCard)
     : lineBuf(lb), lineCap(lc),
-      newestId(nId), idCap(idC),
-      newestText(nTxt), textCap(txtC),
+      newestCardId(cId), cardIdCap(cIdC),
+      newestCardText(cTxt), cardTextCap(cTxtC),
       newestAttachUrl(nAtt), attachCap(attC),
-      newestTime(nTime) {}
+      newestCardTime(cTime),
+      newestPlainId(pId), plainIdCap(pIdC),
+      newestPlainText(pTxt), plainTextCap(pTxtC),
+      newestPlainTime(pTime),
+      lastWasCard(lastCard) {}
 
   int available() override { return 0; }
   int read() override { return -1; }
@@ -970,19 +1010,30 @@ public:
     char mtxt[320] = "";
     int attPos = findJsonKeyColon(line, "attachment");
     bool hasMsg = extractJsonStringUnescaped(line, "message", mtxt, sizeof(mtxt));
-    if (extractJsonStringUnescaped(line, "id", mid, sizeof(mid)) && (hasMsg || attPos > 0)) {
-      if (strcmp(mid, lastNtfyId) != 0) {
-        strncpy(newestId, mid, idCap - 1);
-        newestId[idCap - 1] = '\0';
-        strncpy(newestText, mtxt, textCap - 1);
-        newestText[textCap - 1] = '\0';
-        newestTime = extractJsonUintField(line, "time");
-        newestAttachUrl[0] = '\0';
+    if (!extractJsonStringUnescaped(line, "id", mid, sizeof(mid))) return;
+    if (strcmp(mid, lastNtfyId) == 0) return;
 
-        if (attPos > 0) {
-          extractJsonStringUnescaped(line, "url", newestAttachUrl, attachCap, attPos);
-        }
+    uint32_t tm = extractJsonUintField(line, "time");
+    if (attPos > 0) {
+      char urlBuf[256] = "";
+      extractJsonStringUnescaped(line, "url", urlBuf, sizeof(urlBuf), attPos);
+      if (urlBuf[0] != '\0') {
+        strncpy(newestCardId, mid, cardIdCap - 1);
+        newestCardId[cardIdCap - 1] = '\0';
+        strncpy(newestCardText, mtxt, cardTextCap - 1);
+        newestCardText[cardTextCap - 1] = '\0';
+        strncpy(newestAttachUrl, urlBuf, attachCap - 1);
+        newestAttachUrl[attachCap - 1] = '\0';
+        newestCardTime = tm;
+        lastWasCard = true;
       }
+    } else if (hasMsg && mtxt[0] != '\0') {
+      strncpy(newestPlainId, mid, plainIdCap - 1);
+      newestPlainId[plainIdCap - 1] = '\0';
+      strncpy(newestPlainText, mtxt, plainTextCap - 1);
+      newestPlainText[plainTextCap - 1] = '\0';
+      newestPlainTime = tm;
+      lastWasCard = false;
     }
   }
 
@@ -1005,13 +1056,19 @@ public:
 
 void ntfyPollTask(void* /*param*/) {
   static char lineBuf[2048];
-  static char newestText[320];
-  static char newestId[32];
+  static char newestCardText[320];
+  static char newestCardId[32];
   static char newestAttachUrl[256];
-  newestText[0] = '\0';
-  newestId[0] = '\0';
+  static char newestPlainText[320];
+  static char newestPlainId[32];
+  newestCardText[0] = '\0';
+  newestCardId[0] = '\0';
   newestAttachUrl[0] = '\0';
-  uint32_t newestTime = 0;
+  newestPlainText[0] = '\0';
+  newestPlainId[0] = '\0';
+  uint32_t newestCardTime = 0;
+  uint32_t newestPlainTime = 0;
+  bool lastWasCard = false;
   int httpCode = -1;
 
   {
@@ -1025,10 +1082,13 @@ void ntfyPollTask(void* /*param*/) {
       httpCode = https.GET();
       if (httpCode == HTTP_CODE_OK) {
         NtfyLineStream parser(lineBuf, sizeof(lineBuf),
-                              newestId, sizeof(newestId),
-                              newestText, sizeof(newestText),
+                              newestCardId, sizeof(newestCardId),
+                              newestCardText, sizeof(newestCardText),
                               newestAttachUrl, sizeof(newestAttachUrl),
-                              newestTime);
+                              newestCardTime,
+                              newestPlainId, sizeof(newestPlainId),
+                              newestPlainText, sizeof(newestPlainText),
+                              newestPlainTime, lastWasCard);
         https.writeToStream(&parser);
         parser.processCurrentLine();
       }
@@ -1036,25 +1096,33 @@ void ntfyPollTask(void* /*param*/) {
     }
   }
 
-  if (httpCode == HTTP_CODE_OK && newestId[0] != '\0' && !incomingMsgPendingApply) {
-    bool gotCard = false;
-    if (newestAttachUrl[0] != '\0') {
-      gotCard = downloadLvcAttachmentToFlash(newestAttachUrl, newestText, sizeof(newestText));
+  if (httpCode == HTTP_CODE_OK) {
+    if (newestCardId[0] != '\0' && !incomingMsgPendingApply) {
+      bool gotCard = downloadLvcAttachmentToFlash(newestAttachUrl, newestCardText, sizeof(newestCardText));
       if (!gotCard) {
         vTaskDelay(pdMS_TO_TICKS(250));
-        gotCard = downloadLvcAttachmentToFlash(newestAttachUrl, newestText, sizeof(newestText));
+        gotCard = downloadLvcAttachmentToFlash(newestAttachUrl, newestCardText, sizeof(newestCardText));
       }
-      if (!gotCard && (newestText[0] == '\0' || strstr(newestText, "You received a file:") != nullptr)) {
-        snprintf(newestText, sizeof(newestText), "Открытка не загрузилась :(");
+      if (!gotCard && (newestCardText[0] == '\0' || strstr(newestCardText, "You received a file:") != nullptr)) {
+        snprintf(newestCardText, sizeof(newestCardText), "Открытка не загрузилась :(");
       }
+      strncpy(pendingMsgId, newestCardId, sizeof(pendingMsgId) - 1);
+      pendingMsgId[sizeof(pendingMsgId) - 1] = '\0';
+      strncpy(pendingMsgText, newestCardText, sizeof(pendingMsgText) - 1);
+      pendingMsgText[sizeof(pendingMsgText) - 1] = '\0';
+      pendingMsgEpoch = newestCardTime;
+      pendingMsgHasCard = gotCard;
+      incomingMsgPendingApply = true;
     }
-    strncpy(pendingMsgId, newestId, sizeof(pendingMsgId) - 1);
-    pendingMsgId[sizeof(pendingMsgId) - 1] = '\0';
-    strncpy(pendingMsgText, newestText, sizeof(pendingMsgText) - 1);
-    pendingMsgText[sizeof(pendingMsgText) - 1] = '\0';
-    pendingMsgEpoch = newestTime;
-    pendingMsgHasCard = gotCard;
-    incomingMsgPendingApply = true;
+
+    if (newestPlainId[0] != '\0' && !incomingTextPendingApply) {
+      strncpy(pendingPlainId, newestPlainId, sizeof(pendingPlainId) - 1);
+      pendingPlainId[sizeof(pendingPlainId) - 1] = '\0';
+      strncpy(pendingPlainText, newestPlainText, sizeof(pendingPlainText) - 1);
+      pendingPlainText[sizeof(pendingPlainText) - 1] = '\0';
+      pendingPlainEpoch = newestPlainTime;
+      incomingTextPendingApply = true;
+    }
   }
 
   ntfyPollRunning = false;
@@ -1451,9 +1519,12 @@ void renderTickerBuffered(float dtSec) {
   tft.drawRGBBitmap(44, 166, buf, W, H);
 }
 
-void renderMessageCardBuffered(float dtSec) {
+void renderMessageCardBuffered(float dtSec, bool isTextPage = false) {
   if (msgNeedsRewrap) {
-    prepareWrappedCurrentMessage();
+    const char* txt = isTextPage
+      ? ((plainTextMsg[0] != '\0') ? plainTextMsg : "Нет сообщений")
+      : ((msgHistoryCount > 0 && msgHistory[0].text[0] != '\0') ? msgHistory[0].text : "—");
+    prepareWrappedText(txt);
   }
 
   const int W = 172;
@@ -1515,7 +1586,8 @@ void renderMessageCardBuffered(float dtSec) {
     }
   }
 
-  msgCanvas.drawRoundRect(0, 0, W, H, 14, unreadMessage ? COL_PINK_HOT : COL_RING_DIM);
+  bool isUnread = isTextPage ? unreadTextMsg : unreadMessage;
+  msgCanvas.drawRoundRect(0, 0, W, H, 14, isUnread ? COL_PINK_HOT : COL_RING_DIM);
   tft.drawRGBBitmap(34, 62, msgCanvas.getBuffer(), W, H);
 }
 
@@ -1527,22 +1599,25 @@ void renderHoldHintBuffered(const char* msg) {
   tft.drawRGBBitmap(44, 188, tickerCanvas.getBuffer(), 152, 16);
 }
 
-void drawPageDots(int page1to4, bool onPhotoCard = false) {
+void drawPageDots(int page1to5, bool onPhotoCard = false) {
   int16_t y = onPhotoCard ? 225 : 207;
   if (onPhotoCard) {
-    tft.fillRoundRect(92, y - 5, 56, 11, 5, COL_CARD_BG);
+    tft.fillRoundRect(86, y - 5, 68, 11, 5, COL_CARD_BG);
   }
-  for (int i = 1; i <= 4; i++) {
-    int16_t x = 102 + (i - 1) * 12;
-    if (i == page1to4) {
+  for (int i = 1; i <= 5; i++) {
+    int16_t x = 96 + (i - 1) * 12;
+    if (i == page1to5) {
       tft.fillCircle(x, y, 3, COL_PINK_HOT);
     } else {
       tft.fillCircle(x, y, 3, onPhotoCard ? COL_CARD_BG : COL_BG);
       tft.drawCircle(x, y, 2, COL_RING_DIM);
     }
   }
-  if (unreadMessage && page1to4 != 2) {
-    tft.fillCircle(114, y, 3, COL_GOLD_SOFT);
+  if (unreadMessage && page1to5 != 2) {
+    tft.fillCircle(108, y, 3, COL_GOLD_SOFT);
+  }
+  if (unreadTextMsg && page1to5 != 3) {
+    tft.fillCircle(120, y, 3, COL_GOLD_SOFT);
   }
 }
 
@@ -1606,32 +1681,39 @@ void drawTimerStatic() {
   prevOrbitBy = -999;
 }
 
-void drawMessagesStatic() {
-  activeCardRendered = false;
-  if (hasActiveCard0()) {
-    drawFullCard0Instant();
-    return;
-  }
-
+void drawTextCardStatic(const char* hdr, uint16_t hdrCol, uint32_t epoch, int pageNum) {
   tft.fillScreen(COL_BG);
   drawDecorativeRings();
-  if (unreadMessage) {
-    drawCenteredUTF8(tft, 45, "НОВОЕ ПОСЛАНИЕ", COL_GOLD_SOFT, COL_BG, 1);
-  } else {
-    drawCenteredUTF8(tft, 45, "ПОСЛАНИЕ ДЛЯ ТЕБЯ", COL_PINK_SOFT, COL_BG, 1);
-  }
+  drawCenteredUTF8(tft, 45, hdr, hdrCol, COL_BG, 1);
 
-  if (msgHistoryCount > 0) {
+  if (epoch > 0) {
     char tmStr[40];
-    formatMsgTimestamp(msgHistory[0].epoch, tmStr, sizeof(tmStr));
+    formatMsgTimestamp(epoch, tmStr, sizeof(tmStr));
     drawCenteredUTF8(tft, 156, tmStr, COL_MUTED, COL_BG, 1);
   } else {
     drawCenteredUTF8(tft, 156, "—", COL_MUTED, COL_BG, 1);
   }
   drawCenteredUTF8(tft, 173, "Кн.1 (10с) - послать ♥", COL_PINK_SOFT, COL_BG, 1);
 
-  drawPageDots(2, false);
+  drawPageDots(pageNum, false);
   msgNeedsRewrap = true;
+}
+
+void drawMessagesStatic() {
+  activeCardRendered = false;
+  if (hasActiveCard0()) {
+    drawFullCard0Instant();
+    return;
+  }
+  drawTextCardStatic(unreadMessage ? "НОВОЕ ПОСЛАНИЕ" : "ПОСЛАНИЕ ДЛЯ ТЕБЯ",
+                     unreadMessage ? COL_GOLD_SOFT : COL_PINK_SOFT,
+                     (msgHistoryCount > 0) ? msgHistory[0].epoch : 0, 2);
+}
+
+void drawTextMsgStatic() {
+  drawTextCardStatic(unreadTextMsg ? "НОВОЕ СООБЩЕНИЕ" : "СООБЩЕНИЕ",
+                     unreadTextMsg ? COL_GOLD_SOFT : COL_PINK_SOFT,
+                     (plainTextMsg[0] != '\0') ? plainTextEpoch : 0, 3);
 }
 
 void drawHeartIpStatic() {
@@ -1653,7 +1735,7 @@ void drawHeartIpStatic() {
     drawCenteredUTF8(tft, 168, savedSsid.c_str(), COL_PINK_SOFT, COL_BG, 1);
   }
 
-  drawPageDots(3, false);
+  drawPageDots(5, false);
 }
 
 // Анимированная иконка погоды 56x44 (рисуем через msgCanvas без лишней RAM!)
@@ -1969,6 +2051,8 @@ void stepPageTransition(unsigned long nowMs) {
 
       if (currentScreen == SCREEN_TIMER) {
         drawTimerStatic();
+      } else if (currentScreen == SCREEN_TEXT_MSG) {
+        drawTextMsgStatic();
       } else if (currentScreen == SCREEN_HEART_IP) {
         drawHeartIpStatic();
       } else if (currentScreen == SCREEN_WEATHER) {
@@ -2084,9 +2168,8 @@ void stepPageTransition(unsigned long nowMs) {
     renderWeatherWalkablePill(nowMs, 0);
     if (p >= 1.0f) transActive = false;
   } else {
-    // Текстовое сообщение Стр. 2 без картинки
     renderMiniHeartBuffered(106, 16, nowMs, true);
-    renderMessageCardBuffered(0.03f);
+    renderMessageCardBuffered(0.03f, currentScreen == SCREEN_TEXT_MSG);
     if (p >= 1.0f) transActive = false;
   }
 }
@@ -2510,14 +2593,18 @@ void setupWebRoutes() {
 
   server.on("/api/messages", HTTP_GET, []() {
     String json;
-    json.reserve(512);
-    char head[96];
-    snprintf(head, sizeof(head), "{\"unread\":%s,\"latest_time\":%lu,\"latest_has_card\":%s",
+    json.reserve(640);
+    char head[128];
+    snprintf(head, sizeof(head),
+             "{\"unread\":%s,\"latest_time\":%lu,\"latest_has_card\":%s,\"plain_time\":%lu,\"plain_unread\":%s",
              unreadMessage ? "true" : "false",
              (unsigned long)(msgHistoryCount > 0 ? msgHistory[0].epoch : 0),
-             (msgHistoryCount > 0 && msgHistory[0].hasCard) ? "true" : "false");
+             (msgHistoryCount > 0 && msgHistory[0].hasCard) ? "true" : "false",
+             (unsigned long)plainTextEpoch,
+             unreadTextMsg ? "true" : "false");
     json += head;
     appendJsonStrField(json, "latest_text", msgHistoryCount > 0 ? msgHistory[0].text : "—");
+    appendJsonStrField(json, "plain_text", (plainTextMsg[0] != '\0') ? plainTextMsg : "—");
     json += F(",\"history\":[");
     for (int i = 0; i < msgHistoryCount; i++) {
       if (i > 0) json += ',';
@@ -2530,6 +2617,20 @@ void setupWebRoutes() {
     }
     json += F("]}");
     server.send(200, JSON_CT, json);
+  });
+
+  server.on("/api/text_msg", HTTP_POST, []() {
+    String txt = server.arg("text");
+    txt.trim();
+    if (txt.length() == 0) {
+      sendJsonStr(400, "{\"ok\":false}");
+      return;
+    }
+    savePlainTextMessage(txt.c_str(), getCurrentUtcEpoch(), "");
+    if (!apActive && !bannerActive && !btn1HoldUiActive) {
+      beginPageTransition(SCREEN_TEXT_MSG);
+    }
+    sendJsonOk();
   });
 
   server.on("/api/card", HTTP_GET, []() {
@@ -2554,12 +2655,13 @@ void setupWebRoutes() {
   });
 
   server.on("/api/mark_read", HTTP_POST, []() {
-    if (unreadMessage) {
+    if (unreadMessage || unreadTextMsg) {
       unreadMessage = false;
-      if (currentScreen == SCREEN_MESSAGES && !hasActiveCard0()) {
+      unreadTextMsg = false;
+      if ((currentScreen == SCREEN_MESSAGES && !hasActiveCard0()) || currentScreen == SCREEN_TEXT_MSG) {
         screenNeedsFullRedraw = true;
-      } else if (currentScreen == SCREEN_TIMER || currentScreen == SCREEN_HEART_IP || currentScreen == SCREEN_WEATHER) {
-        int pg = (currentScreen == SCREEN_TIMER) ? 1 : ((currentScreen == SCREEN_HEART_IP) ? 3 : 4);
+      } else if (currentScreen == SCREEN_TIMER || currentScreen == SCREEN_WEATHER || currentScreen == SCREEN_HEART_IP) {
+        int pg = (currentScreen == SCREEN_TIMER) ? 1 : ((currentScreen == SCREEN_WEATHER) ? 4 : 5);
         drawPageDots(pg, false);
       }
     }
@@ -2734,9 +2836,13 @@ void scrollNextPage() {
     unreadMessage = false;
   } else if (cur == SCREEN_MESSAGES) {
     unreadMessage = false;
-    nextMode = SCREEN_HEART_IP;
-  } else if (cur == SCREEN_HEART_IP) {
+    nextMode = SCREEN_TEXT_MSG;
+    unreadTextMsg = false;
+  } else if (cur == SCREEN_TEXT_MSG) {
+    unreadTextMsg = false;
     nextMode = SCREEN_WEATHER;
+  } else if (cur == SCREEN_WEATHER) {
+    nextMode = SCREEN_HEART_IP;
   } else {
     nextMode = SCREEN_TIMER;
   }
@@ -2968,11 +3074,30 @@ void loop() {
     screenNeedsFullRedraw = true;
   }
 
-  if (incomingMsgPendingApply && !btn1HoldUiActive) {
-    pushNewMessageToHistory(pendingMsgText, pendingMsgEpoch, pendingMsgId, pendingMsgHasCard);
-    incomingMsgPendingApply = false;
-    if (!apActive && !bannerActive) {
-      beginPageTransition(SCREEN_MESSAGES);
+  if (!btn1HoldUiActive) {
+    bool appliedCard = false, appliedText = false;
+    bool textIsNewer = (pendingPlainEpoch >= pendingMsgEpoch);
+    if (incomingMsgPendingApply && incomingTextPendingApply && textIsNewer) {
+      pushNewMessageToHistory(pendingMsgText, pendingMsgEpoch, pendingMsgId, pendingMsgHasCard);
+      savePlainTextMessage(pendingPlainText, pendingPlainEpoch, pendingPlainId);
+      incomingMsgPendingApply = false;
+      incomingTextPendingApply = false;
+      appliedText = true;
+    } else {
+      if (incomingMsgPendingApply) {
+        pushNewMessageToHistory(pendingMsgText, pendingMsgEpoch, pendingMsgId, pendingMsgHasCard);
+        incomingMsgPendingApply = false;
+        appliedCard = true;
+      }
+      if (incomingTextPendingApply) {
+        savePlainTextMessage(pendingPlainText, pendingPlainEpoch, pendingPlainId);
+        incomingTextPendingApply = false;
+        appliedText = true;
+        appliedCard = false;
+      }
+    }
+    if ((appliedCard || appliedText) && !apActive && !bannerActive) {
+      beginPageTransition(appliedText ? SCREEN_TEXT_MSG : SCREEN_MESSAGES);
     }
   }
 
@@ -3030,6 +3155,8 @@ void loop() {
       drawApSetupStatic();
     } else if (currentScreen == SCREEN_MESSAGES) {
       drawMessagesStatic();
+    } else if (currentScreen == SCREEN_TEXT_MSG) {
+      drawTextMsgStatic();
     } else if (currentScreen == SCREEN_HEART_IP) {
       drawHeartIpStatic();
     } else if (currentScreen == SCREEN_WEATHER) {
@@ -3058,10 +3185,13 @@ void loop() {
     } else if (currentScreen == SCREEN_MESSAGES) {
       if (!hasActiveCard0()) {
         renderMiniHeartBuffered(106, 16, nowMs, true);
-        renderMessageCardBuffered(dtSec);
+        renderMessageCardBuffered(dtSec, false);
       } else if (!activeCardRendered) {
         drawFullCard0Instant();
       }
+    } else if (currentScreen == SCREEN_TEXT_MSG) {
+      renderMiniHeartBuffered(106, 16, nowMs, true);
+      renderMessageCardBuffered(dtSec, true);
     } else if (currentScreen == SCREEN_TIMER) {
       updateTimerDynamic(nowMs, dtSec);
     }

@@ -658,7 +658,7 @@
         </div>
 
         <div style="font-size:13px; color:var(--text-muted); margin-bottom:10px;">
-          Версия системы: <strong id="fwVerText">v1.3.6</strong> (автообновление включено)
+          Версия системы: <strong id="fwVerText">v1.3.7</strong> (автообновление включено)
         </div>
         <button type="button" class="btn btn-soft" id="otaCheckBtn" onclick="triggerOtaCheck()">
           🔄 Проверить обновление с GitHub
@@ -720,6 +720,19 @@
       <button type="button" class="btn btn-primary" id="replyHeartBtn" onclick="sendLovePulse(true)">
         ❤️ Отправить сердечко в ответ
       </button>
+
+      <div style="margin-top:16px; padding-top:14px; border-top:1px solid #f5dce5;">
+        <div class="field-label">💬 Сообщение для 3-й страницы:</div>
+        <div class="msg-bubble" id="plainMsgText" style="min-height:54px; padding:12px 14px; margin-bottom:6px; font-size:15px;">—</div>
+        <div class="msg-meta" id="plainMsgTime" style="margin-bottom:10px;">—</div>
+        <div class="input-wrap" style="margin-bottom:8px;">
+          <input class="input" id="plainInput" type="text" maxlength="280" placeholder="Напиши текст для 3-й страницы..." style="padding-right:14px;">
+        </div>
+        <button type="button" class="btn btn-soft" id="sendPlainSiteBtn" onclick="sendPlainToStation()">
+          ✉️ Отправить текст на 3-ю страницу
+        </button>
+        <div class="alert" id="plainSiteAlert"></div>
+      </div>
 
       <div class="history-list hidden" id="historyWrap">
         <div style="font-size:12.5px; font-weight:700; color:var(--text-muted); margin-bottom:2px;">
@@ -961,7 +974,11 @@
             document.getElementById('page2RoundWrap').classList.add('hidden');
           }
         }
-        if (data.unread && activePage !== 2) {
+        if (data.plain_text) {
+          document.getElementById('plainMsgText').textContent = data.plain_text;
+          document.getElementById('plainMsgTime').textContent = formatEpochRu(data.plain_time);
+        }
+        if ((data.unread || data.plain_unread) && activePage !== 2) {
           document.getElementById('unreadBadge').classList.remove('hidden');
         } else {
           document.getElementById('unreadBadge').classList.add('hidden');
@@ -1128,6 +1145,37 @@
       } finally {
         btn.disabled = false;
         btn.textContent = 'Подключить к Wi-Fi';
+      }
+    }
+
+    async function sendPlainToStation() {
+      const inp = document.getElementById('plainInput');
+      const btn = document.getElementById('sendPlainSiteBtn');
+      const alertBox = document.getElementById('plainSiteAlert');
+      const txt = inp.value.trim();
+      alertBox.className = 'alert';
+      alertBox.style.display = 'none';
+      if (!txt) return;
+      btn.disabled = true;
+      btn.textContent = 'Отправляем...';
+      try {
+        const body = new URLSearchParams({ text: txt });
+        const res = await fetch('/api/text_msg', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body.toString()
+        });
+        if (!res.ok) throw new Error('err');
+        inp.value = '';
+        alertBox.className = 'alert ok';
+        alertBox.textContent = 'Отправлено на 3-ю страницу станции!';
+        loadMessages();
+      } catch (e) {
+        alertBox.className = 'alert err';
+        alertBox.textContent = 'Не удалось отправить сообщение.';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '✉️ Отправить текст на 3-ю страницу';
       }
     }
 

@@ -268,8 +268,17 @@
 <body>
   <div class="wrap">
     <div class="header">
-      <h1>🎨 Открытка на весь круглый экран</h1>
-      <p>Вставляй фото, двигай текст любым шрифтом, масштабируй эмодзи — и отправляй на 2-ю страницу её станции</p>
+      <h1>🎨 Пульт станции отношений</h1>
+      <p>Открытки (стр. 2) и текстовые сообщения (стр. 3) через облако</p>
+    </div>
+
+    <div class="card">
+      <span class="label-sm" style="font-size:13.5px; margin-bottom:8px;">💬 Текстовое сообщение (3-я страница):</span>
+      <textarea id="plainTextInput" maxlength="280" placeholder="Напиши текстовое сообщение — оно откроется отдельно на 3-й странице, не перекрывая открытку ❤️"></textarea>
+      <button type="button" class="btn-send" id="sendPlainBtn" onclick="sendPlainTextMsg()" style="margin-top:10px;">
+        ✉️ Отправить текст на 3-ю страницу
+      </button>
+      <div class="status" id="plainStatus"></div>
     </div>
 
     <div class="card">
@@ -417,7 +426,7 @@
       </div>
 
       <button type="button" class="btn-send" id="sendBtn" onclick="sendPostcard()">
-        🚀 Отправить открытку на станцию
+        🚀 Отправить открытку на 2-ю страницу
       </button>
       <div class="status" id="sendStatus"></div>
     </div>
@@ -1121,6 +1130,47 @@
       return bgState.photoImg ? 'Фото-открытка ❤️' : 'Открытка для тебя ❤️';
     }
 
+    async function sendPlainTextMsg() {
+      const inp = document.getElementById('plainTextInput');
+      const btn = document.getElementById('sendPlainBtn');
+      const statusBox = document.getElementById('plainStatus');
+      const txt = (inp.value || '').trim();
+      statusBox.className = 'status';
+      if (!txt) {
+        statusBox.className = 'status err';
+        statusBox.textContent = 'Напиши сначала текст сообщения.';
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = 'Отправляем...';
+      try {
+        if (IS_LOCAL_PREVIEW) {
+          const res = await fetch('/api/sim_push_msg', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: txt })
+          });
+          if (!res.ok) throw new Error('preview err');
+        } else {
+          const res = await fetch('https://ntfy.sh/' + encodeURIComponent(getTopic()), {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+            body: txt
+          });
+          if (!res.ok) throw new Error('ntfy status ' + res.status);
+        }
+        inp.value = '';
+        statusBox.className = 'status ok';
+        statusBox.textContent = 'Отправлено! Через пару секунд на 3-й странице станции появится твоё текстовое сообщение.';
+      } catch (e) {
+        statusBox.className = 'status err';
+        statusBox.textContent = 'Ошибка отправки. Проверь подключение к интернету.';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '✉️ Отправить текст на 3-ю страницу';
+      }
+    }
+
     async function sendPostcard() {
       const btn = document.getElementById('sendBtn');
       const statusBox = document.getElementById('sendStatus');
@@ -1160,7 +1210,7 @@
         statusBox.textContent = 'Ошибка отправки. Проверь подключение к интернету.';
       } finally {
         btn.disabled = false;
-        btn.textContent = '🚀 Отправить открытку на станцию';
+        btn.textContent = '🚀 Отправить открытку на 2-ю страницу';
       }
     }
 
