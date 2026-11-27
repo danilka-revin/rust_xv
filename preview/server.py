@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Интерактивное превью «Станция отношений» v1.3.7:
+Интерактивное превью «Станция отношений» v1.3.8:
 - Круглый экран GC9A01A (5 страниц с плавными переходами по Кнопке 2: Таймер → Открытка → Текст → Погода → IP/Сердце)
 - Поддержка полноэкранных открыток LVC1 на 2-й странице и отдельного текстового сообщения на 3-й странице
 - 4-я страница погоды с «ГУЛЯБЕЛЬНО ❤», 5-я страница — информация о сайте
@@ -29,7 +29,7 @@ STATE = {
     "has_saved_pass": True,
     "ip": "192.168.1.48",
     "tz_offset": 3,
-    "version": "1.3.7",
+    "version": "1.3.8",
     "pulse_seq": 0,
     "ota_seq": 0,
     "msg_seq": 0,
@@ -289,7 +289,7 @@ STUDIO_HTML = r"""<!DOCTYPE html>
 
     let state = {
       connected: true, ssid: 'Home_WiFi_5G', ip: '192.168.1.48', tz_offset: 3,
-      version: '1.3.7', pulse_seq: 0, ota_seq: 0, msg_seq: 0, plain_seq: 0, unread: false, plain_unread: false,
+      version: '1.3.8', pulse_seq: 0, ota_seq: 0, msg_seq: 0, plain_seq: 0, unread: false, plain_unread: false,
       plain_text: 'Люблю тебя без повода ❤️', plain_time: 1795785300,
       weather: { valid: true, city: 'Москва', temp: 12, feels: 10, wind: 3, code: 2, desc: 'Переменная облачность', walkable: true },
       messages: [{ text: 'Я всегда рядом с тобой ❤️', time: 1795785000, has_card: false }]
@@ -632,7 +632,15 @@ STUDIO_HTML = r"""<!DOCTYPE html>
       ctx.strokeStyle = `rgb(${sr},${sg},${sb})`;
       ctx.lineWidth = 1.6;
       ctx.beginPath(); ctx.roundRect(36, 144, 168, 30, 13); ctx.fill(); ctx.stroke();
-      centerText('ГУЛЯБЕЛЬНО ❤', 151, 15.5, '#55f29b');
+      let moodTxt = 'ГУЛЯБЕЛЬНО ❤';
+      if (w.valid) {
+        const c = w.code || 0;
+        if ((c >= 51 && c <= 67) || (c >= 80 && c <= 82) || c >= 95) moodTxt = 'ПОД ЗОНТОМ ❤';
+        else if ((c >= 71 && c <= 77) || c === 85 || c === 86 || (w.temp || 0) <= 0) moodTxt = 'ОБНИМАТЬСЯ ❤';
+        else if (c === 3 || c === 45 || c === 48 || (w.wind || 0) >= 8) moodTxt = 'УЮТНО ДОМА ❤';
+        else moodTxt = 'ИДЁМ ГУЛЯТЬ ❤';
+      }
+      centerText(moodTxt, 151, 14.5, '#55f29b');
 
       drawMiniHeartSmooth(120, 189, now, true);
       drawPageDots(4, false);
@@ -883,7 +891,7 @@ STUDIO_HTML = r"""<!DOCTYPE html>
           draw3DHeart(120, 86, getBeatScale(now) * elastic, false, now);
           centerText('Адрес страницы:', 143, 10.5, '#b896a4');
           centerText(state.ip, 157, 17, '#ffe58f');
-          centerText(`Wi-Fi ок • v${state.version || '1.3.7'}`, 180, 10.5, '#55f29b');
+          centerText(`Wi-Fi ок • v${state.version || '1.3.8'}`, 180, 10.5, '#55f29b');
           drawPageDots(5, false);
         } else if (screenMode === 'weather') {
           drawWeatherScreen(now);
@@ -959,7 +967,7 @@ STUDIO_HTML = r"""<!DOCTYPE html>
         draw3DHeart(120, 86, getBeatScale(now), false, now);
         centerText('Адрес страницы:', 143, 10.5, '#b896a4');
         centerText(state.ip, 157, 17, '#ffe58f');
-        centerText(`Wi-Fi ок • v${state.version || '1.3.7'}`, 180, 10.5, '#55f29b');
+        centerText(`Wi-Fi ок • v${state.version || '1.3.8'}`, 180, 10.5, '#55f29b');
         drawPageDots(5, false);
       } else {
         drawRings();
@@ -1171,7 +1179,22 @@ class PreviewHandler(BaseHTTPRequestHandler):
                 "version": STATE["version"],
             })
         elif path == "/api/weather":
-            self._send_json(STATE["weather"])
+            w = dict(STATE["weather"])
+            if w.get("valid"):
+                c = int(w.get("code", 0))
+                if (51 <= c <= 67) or (80 <= c <= 82) or c >= 95:
+                    w["mood"] = "ПОД ЗОНТОМ ❤"
+                elif (71 <= c <= 77) or c in (85, 86) or int(w.get("temp", 0)) <= 0:
+                    w["mood"] = "ОБНИМАТЬСЯ ❤"
+                elif c in (3, 45, 48) or int(w.get("wind", 0)) >= 8:
+                    w["mood"] = "УЮТНО ДОМА ❤"
+                else:
+                    w["mood"] = "ИДЁМ ГУЛЯТЬ ❤"
+            else:
+                w["mood"] = "ГУЛЯБЕЛЬНО ❤"
+            self._send_json(w)
+        elif path == "/api/ota_status":
+            self._send_json({"code": 4, "ver": STATE["version"]})
         elif path == "/api/messages":
             latest = STATE["messages"][0] if STATE["messages"] else {"text": "", "time": 0, "has_card": False}
             self._send_json({

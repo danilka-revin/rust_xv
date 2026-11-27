@@ -32,7 +32,7 @@ jobs:
       - name: Compile firmware for XIAO ESP32-C6
         run: |
           arduino-cli compile \
-            --fqbn esp32:esp32:XIAO_ESP32C6 \
+            --fqbn esp32:esp32:XIAO_ESP32C6:PartitionScheme=default \
             --output-dir build_out \
             love_gift_esp32c6
 
@@ -53,6 +53,11 @@ jobs:
           ver = m.group(1).strip()
 
           src_bin = "build_out/love_gift_esp32c6.ino.bin"
+          bin_size = os.path.getsize(src_bin)
+          max_app = 1310720  # Default 4MB with spiffs (1.2MB APP)
+          if bin_size > max_app:
+              print(f"ERROR: Firmware too large ({bin_size} > {max_app} bytes)!")
+              sys.exit(1)
           with open(src_bin, "rb") as bf:
               if bf.read(1) != b"\xe9":
                   print("Invalid ESP32 app binary header!")

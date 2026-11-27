@@ -21,7 +21,7 @@
 #include "web_ui.h"
 
 // --- ВЕРСИЯ ПРОШИВКИ И GITHUB АВТООБНОВЛЕНИЕ (OTA) ---
-#define FIRMWARE_VERSION "1.3.7"
+#define FIRMWARE_VERSION "1.3.8"
 
 static const char* OTA_VERSION_URL =
   "https://raw.githubusercontent.com/danilka-revin/rust_xv/main/ota/version.json";
@@ -269,6 +269,7 @@ unsigned long lastReplySentMs = 0;
 volatile bool otaTaskRunning = false;
 volatile bool otaUpdateReady = false;
 volatile bool otaForceRequested = false;
+volatile uint8_t otaStatusCode = 0; // 0=idle, 1=checking, 2=up-to-date, 3=unavailable, 4=updating
 char otaPendingVersion[24] = "";
 char otaPendingBinUrl[256] = "";
 unsigned long nextOtaCheckMs = OTA_FIRST_CHECK_DELAY_MS;
@@ -1818,6 +1819,15 @@ void renderWeatherIconBuffered(unsigned long nowMs) {
   tft.drawRGBBitmap(92, 34, src, W, H);
 }
 
+const char* weatherMoodText() {
+  if (!weatherValid) return "ГУЛЯБЕЛЬНО ❤";
+  int c = weatherCode;
+  if ((c >= 51 && c <= 67) || (c >= 80 && c <= 82) || c >= 95) return "ПОД ЗОНТОМ ❤";
+  if ((c >= 71 && c <= 77) || c == 85 || c == 86 || weatherTempC <= 0) return "ОБНИМАТЬСЯ ❤";
+  if (c == 3 || c == 45 || c == 48 || weatherWindMs >= 8) return "УЮТНО ДОМА ❤";
+  return "ИДЁМ ГУЛЯТЬ ❤";
+}
+
 void renderWeatherWalkablePill(unsigned long nowMs, int16_t yOffset = 0) {
   pillCanvas.fillScreen(COL_BG);
   uint8_t sr, sg, sb;
@@ -1826,7 +1836,7 @@ void renderWeatherWalkablePill(unsigned long nowMs, int16_t yOffset = 0) {
 
   pillCanvas.fillRoundRect(0, 0, 168, 30, 13, COL_CARD_BG);
   pillCanvas.drawRoundRect(0, 0, 168, 30, 13, borderCol);
-  drawCenteredUTF8(pillCanvas, 7, "ГУЛЯБЕЛЬНО ❤", COL_MINT_OK, COL_CARD_BG, 2);
+  drawCenteredUTF8(pillCanvas, 7, weatherMoodText(), COL_MINT_OK, COL_CARD_BG, 2);
   tft.drawRGBBitmap(36, 144 + yOffset, pillCanvas.getBuffer(), 168, 30);
 }
 
@@ -2302,34 +2312,54 @@ bool isNewerVersion(const char* remoteVer, const char* localVer) {
 }
 
 void otaCheckTask(void* /*param*/) {
-  WiFiClientSecure client;
-  HTTPClient https;
-  char url[160];
-  snprintf(url, sizeof(url), "%s?t=%lu", OTA_VERSION_URL, millis());
+  otaStatusCode = 1;
+  uint8_t resCode = 3;
+  char remVer[24] = "";
+  char remBin[256] = "";
 
-  if (beginHttpsClient(client, https, url, 5, 4500, 5000)) {
-    int code = https.GET();
-    if (code == HTTP_CODE_OK) {
-      String payload;
-      BoundedStringPrint bp(payload, 2048);
-      https.writeToStream(&bp);
-      const char* rawPayload = payload.c_str();
-      char remVer[24] = "";
-      char remBin[256] = "";
-      if (extractJsonStringUnescaped(rawPayload, "version", remVer, sizeof(remVer)) &&
-          extractJsonStringUnescaped(rawPayload, "bin_url", remBin, sizeof(remBin))) {
-        if (isNewerVersion(remVer, FIRMWARE_VERSION)) {
-          strncpy(otaPendingVersion, remVer, sizeof(otaPendingVersion) - 1);
-          otaPendingVersion[sizeof(otaPendingVersion) - 1] = '\0';
-          strncpy(otaPendingBinUrl, remBin, sizeof(otaPendingBinUrl) - 1);
-          otaPendingBinUrl[sizeof(otaPendingBinUrl) - 1] = '\0';
-          otaUpdateReady = true;
+  {
+    WiFiClientSecure client;
+    HTTPClient https;
+    char url[160];
+    snprintf(url, sizeof(url), "%s?t=%lu", OTA_VERSION_URL, millis());
+
+    if (beginHttpsClient(client, https, url, 5, 4500, 5000)) {
+      if (https.GET() == HTTP_CODE_OK) {
+        String payload;
+        BoundedStringPrint bp(payload, 2048);
+        https.writeToStream(&bp);
+        const char* rawPayload = payload.c_str();
+        if (extractJsonStringUnescaped(rawPayload, "version", remVer, sizeof(remVer)) &&
+            extractJsonStringUnescaped(rawPayload, "bin_url", remBin, sizeof(remBin))) {
+          resCode = isNewerVersion(remVer, FIRMWARE_VERSION) ? 4 : 2;
         }
       }
+      https.end();
     }
-    https.end();
   }
 
+  if (resCode == 4) {
+    WiFiClientSecure binClient;
+    HTTPClient binHttp;
+    bool binOk = false;
+    if (beginHttpsClient(binClient, binHttp, remBin, 5, 4500, 5000)) {
+      int hCode = binHttp.sendRequest("HEAD");
+      int hLen = binHttp.getSize();
+      binHttp.end();
+      binOk = (hCode == HTTP_CODE_OK && (hLen > 100000 || hLen == -1));
+    }
+    if (binOk) {
+      strncpy(otaPendingVersion, remVer, sizeof(otaPendingVersion) - 1);
+      otaPendingVersion[sizeof(otaPendingVersion) - 1] = '\0';
+      strncpy(otaPendingBinUrl, remBin, sizeof(otaPendingBinUrl) - 1);
+      otaPendingBinUrl[sizeof(otaPendingBinUrl) - 1] = '\0';
+      otaUpdateReady = true;
+    } else {
+      resCode = 3;
+    }
+  }
+
+  otaStatusCode = resCode;
   otaTaskRunning = false;
   vTaskDelete(nullptr);
 }
@@ -2337,8 +2367,12 @@ void otaCheckTask(void* /*param*/) {
 void startBackgroundOtaCheck() {
   if (!canStartTlsSession(true)) return;
   otaForceRequested = false;
+  otaStatusCode = 1;
   otaTaskRunning = true;
-  if (xTaskCreate(otaCheckTask, "ota_chk", 20480, nullptr, 1, nullptr) != pdPASS) otaTaskRunning = false;
+  if (xTaskCreate(otaCheckTask, "ota_chk", 20480, nullptr, 1, nullptr) != pdPASS) {
+    otaStatusCode = 3;
+    otaTaskRunning = false;
+  }
 }
 
 void renderOtaProgressBarBuffered(int percent) {
@@ -2555,7 +2589,7 @@ void setupWebRoutes() {
 
   server.on("/api/weather", HTTP_GET, []() {
     String json;
-    json.reserve(192);
+    json.reserve(224);
     char numPart[96];
     snprintf(numPart, sizeof(numPart),
              "{\"valid\":%s,\"temp\":%d,\"feels\":%d,\"wind\":%d,\"code\":%d,\"walkable\":true",
@@ -2564,6 +2598,7 @@ void setupWebRoutes() {
     json += numPart;
     appendJsonStrField(json, "city", weatherCity.c_str());
     appendJsonStrField(json, "desc", weatherCodeToRu(weatherCode));
+    appendJsonStrField(json, "mood", weatherMoodText());
     json += '}';
     server.send(200, JSON_CT, json);
   });
@@ -2720,7 +2755,13 @@ void setupWebRoutes() {
   server.on("/api/ota_check", HTTP_POST, []() {
     otaForceRequested = true;
     startBackgroundOtaCheck();
-    sendJsonStr(200, "{\"ok\":true,\"message\":\"Проверяем GitHub... Если доступна новая версия, станция обновится автоматически.\"}");
+    sendJsonStr(200, "{\"ok\":true,\"message\":\"Проверяем GitHub...\"}");
+  });
+
+  server.on("/api/ota_status", HTTP_GET, []() {
+    char buf[96];
+    snprintf(buf, sizeof(buf), "{\"code\":%u,\"ver\":\"%s\"}", (unsigned)otaStatusCode, otaPendingVersion);
+    sendJsonStr(200, buf);
   });
 
   server.on("/api/connect", HTTP_POST, []() {
