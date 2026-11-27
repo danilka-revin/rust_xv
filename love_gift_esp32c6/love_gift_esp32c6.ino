@@ -39,7 +39,7 @@
 #include "web_ui.h"
 
 // --- ВЕРСИЯ ПРОШИВКИ И GITHUB АВТООБНОВЛЕНИЕ (OTA) ---
-#define FIRMWARE_VERSION "1.3.0"
+#define FIRMWARE_VERSION "1.3.5"
 
 static const char* OTA_VERSION_URL =
   "https://raw.githubusercontent.com/danilka-revin/rust_xv/main/ota/version.json";
@@ -190,6 +190,7 @@ unsigned long lastReplySentMs = 0;
 
 volatile bool otaTaskRunning = false;
 volatile bool otaUpdateReady = false;
+volatile bool otaForceRequested = false;
 char otaPendingVersion[24] = "";
 char otaPendingBinUrl[256] = "";
 unsigned long nextOtaCheckMs = OTA_FIRST_CHECK_DELAY_MS;
@@ -1988,6 +1989,7 @@ void startBackgroundOtaCheck() {
   if (WiFi.status() != WL_CONNECTED) return;
   if (ESP.getFreeHeap() < 75000) return;
 
+  otaForceRequested = false;
   otaTaskRunning = true;
   if (xTaskCreate(otaCheckTask, "ota_chk", 20480, nullptr, 1, nullptr) != pdPASS) {
     otaTaskRunning = false;
@@ -2032,7 +2034,9 @@ void performOtaUpdate() {
 
   HTTPClient https;
   https.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  https.setConnectTimeout(6000);
   https.setTimeout(15000);
+  https.setReuse(false);
 
   bool success = false;
 
@@ -2334,6 +2338,7 @@ void setupWebRoutes() {
   });
 
   server.on("/api/ota_check", HTTP_POST, []() {
+    otaForceRequested = true;
     startBackgroundOtaCheck();
     server.send(200, "application/json; charset=utf-8",
                 "{\"ok\":true,\"message\":\"Проверяем GitHub... Если доступна новая версия, станция обновится автоматически.\"}");
@@ -2634,7 +2639,7 @@ void loop() {
           nextWeatherPollMs = nowMs + WEATHER_POLL_INTERVAL_MS;
           startBackgroundWeatherPoll();
         }
-        if ((long)(nowMs - nextOtaCheckMs) >= 0) {
+        if (otaForceRequested || (long)(nowMs - nextOtaCheckMs) >= 0) {
           nextOtaCheckMs = nowMs + OTA_CHECK_INTERVAL_MS;
           startBackgroundOtaCheck();
         }
