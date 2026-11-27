@@ -152,6 +152,8 @@ bool wifiConnected = false;
 bool apActive = false;
 bool pendingDisableAp = false;
 unsigned long disableApAtMs = 0;
+bool bannerActive = false;
+unsigned long bannerUntilMs = 0;
 unsigned long lastWifiRetryMs = 0;
 bool timeSynced = false;
 bool fsReady = false;
@@ -231,40 +233,15 @@ const char* LOVE_PHRASES[] = {
 };
 const int LOVE_PHRASES_COUNT = sizeof(LOVE_PHRASES) / sizeof(LOVE_PHRASES[0]);
 
-// --- АНТИДРЕБЕЗГ КНОПОК + АППАРАТНАЯ ЗАЩЁЛКА ПРЕРЫВАНИЙ ---
+// --- АНТИДРЕБЕЗГ КНОПОК ---
 DebouncedButton btn1 = { BTN_1, false, false, 0 };
 DebouncedButton btn2 = { BTN_2, false, false, 0 };
-
-volatile bool btn1IsrTap = false;
-volatile bool btn2IsrTap = false;
-volatile unsigned long btn1LastRiseMs = 0;
-volatile unsigned long btn2LastRiseMs = 0;
 
 unsigned long btn2PressStartMs = 0;
 bool btn2LongHandled = false;
 int lastHoldSecShown = 0;
 unsigned long lastPageSwitchMs = 0;
 unsigned long lastBtn1ActionMs = 0;
-
-void IRAM_ATTR isrBtn1Change() {
-  unsigned long now = millis();
-  if (digitalRead(BTN_1) == HIGH) {
-    btn1LastRiseMs = now;
-  } else if (btn1LastRiseMs != 0 && (now - btn1LastRiseMs) >= BTN_PRESS_DEBOUNCE_MS) {
-    btn1IsrTap = true;
-    btn1LastRiseMs = 0;
-  }
-}
-
-void IRAM_ATTR isrBtn2Change() {
-  unsigned long now = millis();
-  if (digitalRead(BTN_2) == HIGH) {
-    btn2LastRiseMs = now;
-  } else if (btn2LastRiseMs != 0 && (now - btn2LastRiseMs) >= BTN_PRESS_DEBOUNCE_MS) {
-    btn2IsrTap = true;
-    btn2LastRiseMs = 0;
-  }
-}
 
 bool updateButton(DebouncedButton &b, unsigned long nowMs, bool &justPressed, bool &justReleased) {
   justPressed = false;
@@ -747,14 +724,54 @@ bool downloadLvcAttachmentToFlash(const char* url, char* outCaption, size_t outC
   return ok;
 }
 
+void readHttpBodyBounded(HTTPClient &https, String &out, size_t maxBytes) {
+  out = "";
+  WiFiClient* stream = https.getStreamPtr();
+  if (!stream) return;
+  uint8_t buf[256];
+  unsigned long startMs = millis();
+  unsigned long lastDataMs = startMs;
+  while ((https.connected() || stream->available() > 0) && out.length() < maxBytes) {
+    int avail = stream->available();
+    if (avail > 0) {
+      size_t toRead = (size_t)avail;
+      if (toRead > sizeof(buf)) toRead = sizeof(buf);
+      if (out.length() + toRead > maxBytes) toRead = maxBytes - out.length();
+      int rd = stream->readBytes(buf, toRead);
+      if (rd > 0) {
+        buf[rd] = '\0';
+        for (int i = 0; i < rd; i++) out += (char)buf[i];
+        lastDataMs = millis();
+      }
+    } else {
+      if (millis() - lastDataMs > 3000UL || millis() - startMs > 5500UL) break;
+      delay(4);
+    }
+    yield();
+  }
+}
+
 void ntfyPollTask(void* /*param*/) {
+  static char newestText[320];
+  static char newestId[32];
+  static char newestAttachUrl[256];
+  static char ev[24];
+  static char mid[32];
+  static char mtxt[320];
+  newestText[0] = '\0';
+  newestId[0] = '\0';
+  newestAttachUrl[0] = '\0';
+  uint32_t newestTime = 0;
+
   WiFiClientSecure client;
   client.setInsecure();
-  client.setTimeout(8);
+  client.setTimeout(5);
 
   HTTPClient https;
   https.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-  https.setTimeout(8000);
+  https.setConnectTimeout(4500);
+  https.setTimeout(5000);
+  https.setReuse(false);
 
   String sinceArg = (lastNtfyId[0] != '\0') ? String(lastNtfyId) : String("48h");
   String url = String("https://ntfy.sh/") + NTFY_TOPIC + "/json?poll=1&since=" + sinceArg;
@@ -762,12 +779,9 @@ void ntfyPollTask(void* /*param*/) {
   if (https.begin(client, url)) {
     int code = https.GET();
     if (code == HTTP_CODE_OK) {
-      String body = https.getString();
+      String body;
+      readHttpBodyBounded(https, body, 12288);
       int startIdx = 0;
-      char newestText[320] = "";
-      char newestId[32] = "";
-      char newestAttachUrl[256] = "";
-      uint32_t newestTime = 0;
 
       while (startIdx < (int)body.length()) {
         int nl = body.indexOf('\n', startIdx);
@@ -776,17 +790,19 @@ void ntfyPollTask(void* /*param*/) {
         line.trim();
         if (line.length() < 10) continue;
 
-        char ev[24] = "";
+        ev[0] = '\0';
         if (!extractJsonStringUnescaped(line, "event", ev, sizeof(ev))) continue;
         if (strcmp(ev, "message") != 0) continue;
 
-        char mid[32] = "";
-        char mtxt[320] = "";
+        mid[0] = '\0';
+        mtxt[0] = '\0';
         if (extractJsonStringUnescaped(line, "id", mid, sizeof(mid)) &&
             extractJsonStringUnescaped(line, "message", mtxt, sizeof(mtxt))) {
           if (strcmp(mid, lastNtfyId) != 0) {
             strncpy(newestId, mid, sizeof(newestId) - 1);
+            newestId[sizeof(newestId) - 1] = '\0';
             strncpy(newestText, mtxt, sizeof(newestText) - 1);
+            newestText[sizeof(newestText) - 1] = '\0';
             newestTime = extractJsonUintField(line, "time");
             newestAttachUrl[0] = '\0';
 
@@ -804,7 +820,9 @@ void ntfyPollTask(void* /*param*/) {
           gotCard = downloadLvcAttachmentToFlash(newestAttachUrl, newestText, sizeof(newestText));
         }
         strncpy(pendingMsgId, newestId, sizeof(pendingMsgId) - 1);
+        pendingMsgId[sizeof(pendingMsgId) - 1] = '\0';
         strncpy(pendingMsgText, newestText, sizeof(pendingMsgText) - 1);
+        pendingMsgText[sizeof(pendingMsgText) - 1] = '\0';
         pendingMsgEpoch = newestTime;
         pendingMsgHasCard = gotCard;
         incomingMsgPendingApply = true;
@@ -818,10 +836,11 @@ void ntfyPollTask(void* /*param*/) {
 }
 
 void startBackgroundNtfyPoll() {
-  if (ntfyPollRunning || otaTaskRunning || otaUpdateReady) return;
+  if (ntfyPollRunning || weatherPollRunning || otaTaskRunning || otaUpdateReady) return;
   if (WiFi.status() != WL_CONNECTED) return;
+  if (ESP.getFreeHeap() < 75000) return;
   ntfyPollRunning = true;
-  if (xTaskCreate(ntfyPollTask, "ntfy_in", 12288, nullptr, 1, nullptr) != pdPASS) {
+  if (xTaskCreate(ntfyPollTask, "ntfy_in", 20480, nullptr, 1, nullptr) != pdPASS) {
     ntfyPollRunning = false;
   }
 }
@@ -829,10 +848,12 @@ void startBackgroundNtfyPoll() {
 void ntfyReplyTask(void* /*param*/) {
   WiFiClientSecure client;
   client.setInsecure();
-  client.setTimeout(8);
+  client.setTimeout(5);
 
   HTTPClient https;
-  https.setTimeout(8000);
+  https.setConnectTimeout(4500);
+  https.setTimeout(5000);
+  https.setReuse(false);
 
   String url = String("https://ntfy.sh/") + NTFY_TOPIC + "_reply";
   if (https.begin(client, url)) {
@@ -849,10 +870,11 @@ void sendCloudReplyHeart() {
   unsigned long now = millis();
   if (ntfyReplyRunning || (now - lastReplySentMs < 5000UL)) return;
   if (WiFi.status() != WL_CONNECTED) return;
+  if (ESP.getFreeHeap() < 75000) return;
 
   lastReplySentMs = now;
   ntfyReplyRunning = true;
-  if (xTaskCreate(ntfyReplyTask, "ntfy_out", 10240, nullptr, 1, nullptr) != pdPASS) {
+  if (xTaskCreate(ntfyReplyTask, "ntfy_out", 20480, nullptr, 1, nullptr) != pdPASS) {
     ntfyReplyRunning = false;
   }
 }
@@ -876,11 +898,13 @@ const char* weatherCodeToRu(int code) {
 void weatherPollTask(void* /*param*/) {
   WiFiClientSecure client;
   client.setInsecure();
-  client.setTimeout(8);
+  client.setTimeout(5);
 
   HTTPClient https;
   https.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-  https.setTimeout(8000);
+  https.setConnectTimeout(4500);
+  https.setTimeout(5000);
+  https.setReuse(false);
 
   long latE4 = (long)roundf(weatherLat * 10000.0f);
   long lonE4 = (long)roundf(weatherLon * 10000.0f);
@@ -897,7 +921,8 @@ void weatherPollTask(void* /*param*/) {
   if (https.begin(client, String(urlBuf))) {
     int code = https.GET();
     if (code == HTTP_CODE_OK) {
-      String body = https.getString();
+      String body;
+      readHttpBodyBounded(https, body, 4096);
       int curPos = findJsonKeyColon(body, "current");
       if (curPos >= 0) {
         float t = 0.0f, app = 0.0f, wcode = 0.0f, wind = 0.0f;
@@ -924,9 +949,10 @@ void weatherPollTask(void* /*param*/) {
 void startBackgroundWeatherPoll() {
   if (weatherPollRunning || ntfyPollRunning || otaTaskRunning || otaUpdateReady) return;
   if (WiFi.status() != WL_CONNECTED) return;
+  if (ESP.getFreeHeap() < 75000) return;
 
   weatherPollRunning = true;
-  if (xTaskCreate(weatherPollTask, "wx_poll", 12288, nullptr, 1, nullptr) != pdPASS) {
+  if (xTaskCreate(weatherPollTask, "wx_poll", 20480, nullptr, 1, nullptr) != pdPASS) {
     weatherPollRunning = false;
   }
 }
@@ -1162,11 +1188,11 @@ void renderDaysBlockBuffered(uint64_t days, int16_t xSlideOffset = 0) {
   drawTextUTF8(msgCanvas, dx, 39, dWord, COL_PINK_HOT, COL_BG, 2);
 
   uint16_t* src = msgCanvas.getBuffer();
-  tft.startWrite();
-  for (int y = 0; y < H; y++) {
-    tft.drawRGBBitmap(36, 67 + y, src + y * msgCanvas.width(), W, 1);
+  int stride = msgCanvas.width();
+  for (int y = 1; y < H; y++) {
+    memmove(src + y * W, src + y * stride, (size_t)W * sizeof(uint16_t));
   }
-  tft.endWrite();
+  tft.drawRGBBitmap(36, 67, src, W, H);
 }
 
 void renderTimePillBuffered(const char* text, uint16_t textColor, int16_t xSlideOffset = 0) {
@@ -1496,11 +1522,11 @@ void renderWeatherIconBuffered(unsigned long nowMs) {
   }
 
   uint16_t* src = msgCanvas.getBuffer();
-  tft.startWrite();
-  for (int y = 0; y < H; y++) {
-    tft.drawRGBBitmap(92, 34 + y, src + y * msgCanvas.width(), W, 1);
+  int stride = msgCanvas.width();
+  for (int y = 1; y < H; y++) {
+    memmove(src + y * W, src + y * stride, (size_t)W * sizeof(uint16_t));
   }
-  tft.endWrite();
+  tft.drawRGBBitmap(92, 34, src, W, H);
 }
 
 void renderWeatherWalkablePill(unsigned long nowMs, int16_t yOffset = 0) {
@@ -1582,15 +1608,15 @@ void drawIrisClosingRing(int rOuter, int rInner, unsigned long nowMs) {
     int xIn  = (dy2 < rInner2) ? (int)sqrtf((float)(rInner2 - dy2)) : 0;
 
     if (xOut >= xIn) {
-      tft.drawFastHLine(120 - xOut, y, xOut - xIn + 1, COL_BG);
-      tft.drawFastHLine(120 + xIn,  y, xOut - xIn + 1, COL_BG);
+      tft.writeFastHLine(120 - xOut, y, xOut - xIn + 1, COL_BG);
+      tft.writeFastHLine(120 + xIn,  y, xOut - xIn + 1, COL_BG);
     }
 
     if (rInner > 3 && dy2 < rInner2) {
       int xH = (dy2 < rHalo2) ? (int)sqrtf((float)(rHalo2 - dy2)) : 0;
       if (xIn > xH) {
-        tft.drawFastHLine(120 - xIn, y, xIn - xH + 1, haloCol);
-        tft.drawFastHLine(120 + xH,  y, xIn - xH + 1, haloCol);
+        tft.writeFastHLine(120 - xIn, y, xIn - xH + 1, haloCol);
+        tft.writeFastHLine(120 + xH,  y, xIn - xH + 1, haloCol);
       }
     }
   }
@@ -1779,9 +1805,12 @@ void updateTimerDynamic(unsigned long nowMs, float dtSec) {
       msgCanvas.fillScreen(COL_BG);
       drawCenteredUTF8(msgCanvas, 12, "Синхронизация", COL_GOLD_SOFT, COL_BG, 2, 168);
       drawCenteredUTF8(msgCanvas, 36, "точного времени...", COL_MUTED, COL_BG, 1, 168);
-      for (int y = 0; y < 56; y++) {
-        tft.drawRGBBitmap(36, 67 + y, msgCanvas.getBuffer() + y * msgCanvas.width(), 168, 1);
+      uint16_t* src = msgCanvas.getBuffer();
+      int stride = msgCanvas.width();
+      for (int y = 1; y < 56; y++) {
+        memmove(src + y * 168, src + y * stride, 168 * sizeof(uint16_t));
       }
+      tft.drawRGBBitmap(36, 67, src, 168, 56);
       renderTimePillBuffered("-- : -- : --", COL_PINK_SOFT);
       snprintf(tickerText, sizeof(tickerText), "ПОДКЛЮЧАЕМСЯ К СЕРВЕРУ ТОЧНОГО ВРЕМЕНИ  •  ");
       tickerLoopPx = (int)utf8CharCount(tickerText) * 6;
@@ -1837,7 +1866,9 @@ void showConnectedBanner(const String& ip) {
   drawCenteredUTF8(tft, 140, "ПАРОЛЬ СОХРАНЁН!", COL_MINT_OK, COL_BG, 1);
   drawCenteredUTF8(tft, 158, ip.c_str(), COL_GOLD_SOFT, COL_BG, 2);
   drawCenteredUTF8(tft, 184, "Открой в браузере", COL_MUTED, COL_BG, 1);
-  delay(2800);
+  bannerActive = true;
+  bannerUntilMs = millis() + 2600UL;
+  transActive = false;
 }
 
 // ============================================================================
@@ -1870,17 +1901,20 @@ bool isNewerVersion(const char* remoteVer, const char* localVer) {
 void otaCheckTask(void* /*param*/) {
   WiFiClientSecure client;
   client.setInsecure();
-  client.setTimeout(10);
+  client.setTimeout(5);
 
   HTTPClient https;
   https.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-  https.setTimeout(10000);
+  https.setConnectTimeout(4500);
+  https.setTimeout(5000);
+  https.setReuse(false);
 
   String url = String(OTA_VERSION_URL) + "?t=" + String(millis());
   if (https.begin(client, url)) {
     int code = https.GET();
     if (code == HTTP_CODE_OK) {
-      String payload = https.getString();
+      String payload;
+      readHttpBodyBounded(https, payload, 2048);
       char remVer[24] = "";
       char remBin[256] = "";
       if (extractJsonStringUnescaped(payload, "version", remVer, sizeof(remVer)) &&
@@ -1902,11 +1936,12 @@ void otaCheckTask(void* /*param*/) {
 }
 
 void startBackgroundOtaCheck() {
-  if (otaTaskRunning || otaUpdateReady || ntfyPollRunning) return;
+  if (otaTaskRunning || otaUpdateReady || ntfyPollRunning || weatherPollRunning) return;
   if (WiFi.status() != WL_CONNECTED) return;
+  if (ESP.getFreeHeap() < 75000) return;
 
   otaTaskRunning = true;
-  if (xTaskCreate(otaCheckTask, "ota_chk", 12288, nullptr, 1, nullptr) != pdPASS) {
+  if (xTaskCreate(otaCheckTask, "ota_chk", 20480, nullptr, 1, nullptr) != pdPASS) {
     otaTaskRunning = false;
   }
 }
@@ -2072,11 +2107,12 @@ bool connectToSavedWifi(unsigned long timeoutMs) {
   }
 
   if (WiFi.status() == WL_CONNECTED) {
+    WiFi.setSleep(false);
     wifiConnected = true;
     configureNtp();
     nextOtaCheckMs = millis() + OTA_FIRST_CHECK_DELAY_MS;
-    nextNtfyPollMs = millis() + 3000UL;
-    nextWeatherPollMs = millis() + 5000UL;
+    nextNtfyPollMs = millis() + 10000UL;
+    nextWeatherPollMs = millis() + 14000UL;
     return true;
   }
 
@@ -2288,6 +2324,7 @@ void setupWebRoutes() {
 
     String passToTry = (newSsid == savedSsid && newPass.length() == 0) ? savedPass : newPass;
 
+    WiFi.scanDelete();
     WiFi.mode(WIFI_AP_STA);
     WiFi.begin(newSsid.c_str(), passToTry.c_str());
 
@@ -2298,6 +2335,7 @@ void setupWebRoutes() {
     }
 
     if (WiFi.status() == WL_CONNECTED) {
+      WiFi.setSleep(false);
       savedSsid = newSsid;
       savedPass = passToTry;
       prefs.putString("ssid", savedSsid);
@@ -2306,19 +2344,17 @@ void setupWebRoutes() {
       wifiConnected = true;
       configureNtp();
       nextOtaCheckMs = millis() + OTA_FIRST_CHECK_DELAY_MS;
-      nextNtfyPollMs = millis() + 3000UL;
-      nextWeatherPollMs = millis() + 5000UL;
+      nextNtfyPollMs = millis() + 10000UL;
+      nextWeatherPollMs = millis() + 14000UL;
       String homeIp = WiFi.localIP().toString();
 
       String resp = "{\"ok\":true,\"ip\":\"" + homeIp + "\"}";
       server.send(200, "application/json; charset=utf-8", resp);
-      delay(200);
 
       pendingDisableAp = true;
-      disableApAtMs = millis() + 6000;
+      disableApAtMs = millis() + 10000UL;
 
       showConnectedBanner(homeIp);
-      beginPageTransition(SCREEN_TIMER);
     } else {
       wifiConnected = false;
       server.send(200, "application/json; charset=utf-8", "{\"ok\":false}");
@@ -2388,25 +2424,17 @@ void handleButtons(unsigned long nowMs) {
   bool b1Pressed = false, b1Released = false;
   bool b2Pressed = false, b2Released = false;
 
-  bool b1Held = updateButton(btn1, nowMs, b1Pressed, b1Released);
+  updateButton(btn1, nowMs, b1Pressed, b1Released);
   bool b2Held = updateButton(btn2, nowMs, b2Pressed, b2Released);
 
   if (b1Pressed) {
     btn1HandledCurrentPress = true;
-    btn1IsrTap = false;
     if ((nowMs - lastBtn1ActionMs) >= PAGE_SWITCH_COOLDOWN_MS) {
       lastBtn1ActionMs = nowMs;
       triggerLovePulse(true);
     }
   } else if (b1Released) {
-    btn1IsrTap = false;
     btn1HandledCurrentPress = false;
-  } else if (!b1Held && !btn1HandledCurrentPress && btn1IsrTap) {
-    btn1IsrTap = false;
-    if ((nowMs - lastBtn1ActionMs) >= PAGE_SWITCH_COOLDOWN_MS) {
-      lastBtn1ActionMs = nowMs;
-      triggerLovePulse(true);
-    }
   }
 
   if (b2Pressed) {
@@ -2414,8 +2442,7 @@ void handleButtons(unsigned long nowMs) {
     btn2LongHandled = false;
     lastHoldSecShown = 0;
     btn2HandledCurrentPress = true;
-    btn2IsrTap = false;
-    if (!apActive && (nowMs - lastPageSwitchMs) >= PAGE_SWITCH_COOLDOWN_MS) {
+    if (!apActive && !bannerActive && (nowMs - lastPageSwitchMs) >= PAGE_SWITCH_COOLDOWN_MS) {
       lastPageSwitchMs = nowMs;
       scrollNextPage();
     }
@@ -2438,17 +2465,10 @@ void handleButtons(unsigned long nowMs) {
       resetWifiSettings();
     }
   } else if (b2Released) {
-    btn2IsrTap = false;
     btn2HandledCurrentPress = false;
     if (!btn2LongHandled && lastHoldSecShown > 0) {
       renderHoldHintBuffered("");
       lastHoldSecShown = 0;
-    }
-  } else if (!b2Held && !btn2HandledCurrentPress && btn2IsrTap) {
-    btn2IsrTap = false;
-    if (!apActive && (nowMs - lastPageSwitchMs) >= PAGE_SWITCH_COOLDOWN_MS) {
-      lastPageSwitchMs = nowMs;
-      scrollNextPage();
     }
   }
 }
@@ -2464,9 +2484,6 @@ void setup() {
   btn1.rawState = btn1.stableState = (digitalRead(BTN_1) == HIGH);
   btn2.rawState = btn2.stableState = (digitalRead(BTN_2) == HIGH);
   btn1.lastChangeMs = btn2.lastChangeMs = millis();
-
-  attachInterrupt(digitalPinToInterrupt(BTN_1), isrBtn1Change, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(BTN_2), isrBtn2Change, CHANGE);
 
   SPI.begin(19, 20, 18, TFT_CS);
   tft.begin(40000000);
@@ -2526,8 +2543,8 @@ void loop() {
   if (pendingDisableAp && nowMs >= disableApAtMs) {
     pendingDisableAp = false;
     dnsServer.stop();
-    WiFi.softAPdisconnect(true);
-    WiFi.mode(WIFI_STA);
+    WiFi.enableAP(false);
+    WiFi.setSleep(false);
     apActive = false;
   }
 
@@ -2536,14 +2553,14 @@ void loop() {
 
     if (apActive && !pendingDisableAp) {
       if (nowConn) {
+        WiFi.setSleep(false);
         wifiConnected = true;
         configureNtp();
         nextOtaCheckMs = nowMs + OTA_FIRST_CHECK_DELAY_MS;
-        nextNtfyPollMs = nowMs + 3000UL;
-        nextWeatherPollMs = nowMs + 5000UL;
+        nextNtfyPollMs = nowMs + 10000UL;
+        nextWeatherPollMs = nowMs + 14000UL;
         dnsServer.stop();
-        WiFi.softAPdisconnect(true);
-        WiFi.mode(WIFI_STA);
+        WiFi.enableAP(false);
         apActive = false;
         beginPageTransition(SCREEN_TIMER);
       } else if (nowMs - lastWifiRetryMs > 15000UL) {
@@ -2553,13 +2570,14 @@ void loop() {
     } else if (!apActive) {
       if (nowConn != wifiConnected) {
         wifiConnected = nowConn;
+        if (nowConn) WiFi.setSleep(false);
         if (currentScreen == SCREEN_HEART_IP && !transActive) screenNeedsFullRedraw = true;
       }
       if (!nowConn && (nowMs - lastWifiRetryMs > 15000UL)) {
         lastWifiRetryMs = nowMs;
         WiFi.begin(savedSsid.c_str(), savedPass.c_str());
       }
-      if (nowConn) {
+      if (nowConn && !bannerActive) {
         if ((long)(nowMs - nextNtfyPollMs) >= 0) {
           nextNtfyPollMs = nowMs + NTFY_POLL_INTERVAL_MS;
           startBackgroundNtfyPoll();
@@ -2576,7 +2594,7 @@ void loop() {
     }
   }
 
-  if (weatherNeedsRedraw && currentScreen == SCREEN_WEATHER && !transActive) {
+  if (weatherNeedsRedraw && currentScreen == SCREEN_WEATHER && !transActive && !bannerActive) {
     weatherNeedsRedraw = false;
     screenNeedsFullRedraw = true;
   }
@@ -2584,18 +2602,32 @@ void loop() {
   if (incomingMsgPendingApply) {
     pushNewMessageToHistory(pendingMsgText, pendingMsgEpoch, pendingMsgId, pendingMsgHasCard);
     incomingMsgPendingApply = false;
-    if (!apActive) {
+    if (!apActive && !bannerActive) {
       beginPageTransition(SCREEN_MESSAGES);
     }
   }
 
-  if (otaUpdateReady) {
+  if (otaUpdateReady && !bannerActive) {
     performOtaUpdate();
     lastFrameMs = millis();
     return;
   }
 
   handleButtons(nowMs);
+
+  if (bannerActive) {
+    if ((long)(nowMs - bannerUntilMs) >= 0) {
+      bannerActive = false;
+      beginPageTransition(SCREEN_TIMER);
+    } else {
+      unsigned long elapsedMs = nowMs - lastFrameMs;
+      if (elapsedMs >= 30) {
+        lastFrameMs = nowMs;
+        renderBigHeartFrame(64, 30, nowMs, false);
+      }
+      return;
+    }
+  }
 
   if (currentScreen == SCREEN_PULSE && !transActive && (nowMs - pulseStartMs >= 2400)) {
     lovePhraseIndex = (lovePhraseIndex + 1) % LOVE_PHRASES_COUNT;
