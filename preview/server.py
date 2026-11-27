@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Интерактивное превью «Станция отношений» v1.3.5:
+Интерактивное превью «Станция отношений» v1.3.6:
 - Круглый экран GC9A01A (4 страницы с плавными переходами по Кнопке 2: Таймер → Послания → IP/Сердце → Погода)
 - Поддержка полноэкранных открыток LVC1 (фото + разные шрифты + эмодзи) на 2-й странице экрана и сайта
 - 4-я страница погоды с «ГУЛЯБЕЛЬНО ❤» в любую погоду
@@ -29,7 +29,7 @@ STATE = {
     "has_saved_pass": True,
     "ip": "192.168.1.48",
     "tz_offset": 3,
-    "version": "1.3.5",
+    "version": "1.3.6",
     "pulse_seq": 0,
     "ota_seq": 0,
     "msg_seq": 0,
@@ -224,7 +224,7 @@ STUDIO_HTML = r"""<!DOCTYPE html>
 <body>
   <div class="top-bar">
     <div>
-      <h1>Станция отношений v1.3.5 — 4 страницы + Погода «ГУЛЯБЕЛЬНО ❤» + Открытки</h1>
+      <h1>Станция отношений v1.3.6 — 4 страницы + Погода «ГУЛЯБЕЛЬНО ❤» + Открытки</h1>
       <p>Нажимай Кнопку 2 для листания 4 страниц (Таймер → Послания → IP → Погода), а справа создавай открытки или настраивай город!</p>
     </div>
     <div class="mode-btns">
@@ -285,7 +285,7 @@ STUDIO_HTML = r"""<!DOCTYPE html>
 
     let state = {
       connected: true, ssid: 'Home_WiFi_5G', ip: '192.168.1.48', tz_offset: 3,
-      version: '1.3.5', pulse_seq: 0, ota_seq: 0, msg_seq: 0, unread: false,
+      version: '1.3.6', pulse_seq: 0, ota_seq: 0, msg_seq: 0, unread: false,
       weather: { valid: true, city: 'Москва', temp: 12, feels: 10, wind: 3, code: 2, desc: 'Переменная облачность', walkable: true },
       messages: [{ text: 'Я всегда рядом с тобой ❤️', time: 1795785000, has_card: false }]
     };
@@ -757,7 +757,7 @@ STUDIO_HTML = r"""<!DOCTYPE html>
       const d = latest.time ? new Date(latest.time * 1000) : new Date();
       const tStr = `Получено ${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')} в ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
       centerText(tStr, 156, 10, '#b896a4');
-      centerText('Кн.1 - послать ♥ в ответ', 173, 10, '#ffb6c1');
+      centerText('Кн.1 (10с) - послать ♥', 173, 10, '#ffb6c1');
       drawPageDots(2, false);
     }
 
@@ -871,7 +871,7 @@ STUDIO_HTML = r"""<!DOCTYPE html>
           draw3DHeart(120, 86, getBeatScale(now) * elastic, false, now);
           centerText('Адрес страницы:', 143, 10.5, '#b896a4');
           centerText(state.ip, 157, 17, '#ffe58f');
-          centerText(`Wi-Fi ок • v${state.version || '1.3.5'}`, 180, 10.5, '#55f29b');
+          centerText(`Wi-Fi ок • v${state.version || '1.3.6'}`, 180, 10.5, '#55f29b');
           drawPageDots(3, false);
         } else if (screenMode === 'weather') {
           drawWeatherScreen(now);
@@ -945,7 +945,7 @@ STUDIO_HTML = r"""<!DOCTYPE html>
         draw3DHeart(120, 86, getBeatScale(now), false, now);
         centerText('Адрес страницы:', 143, 10.5, '#b896a4');
         centerText(state.ip, 157, 17, '#ffe58f');
-        centerText(`Wi-Fi ок • v${state.version || '1.3.5'}`, 180, 10.5, '#55f29b');
+        centerText(`Wi-Fi ок • v${state.version || '1.3.6'}`, 180, 10.5, '#55f29b');
         drawPageDots(3, false);
       } else {
         drawRings();

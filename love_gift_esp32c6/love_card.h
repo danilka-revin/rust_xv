@@ -52,7 +52,7 @@ inline bool lvcParseMetaFromBuffer(const uint8_t* buf, size_t len, LvcMeta& meta
 
   for (int i = 0; i < LVC_STRIP_COUNT; i++) {
     meta.stripLens[i] = lvcReadU32(buf + 10 + i * 4);
-    if (meta.stripLens[i] == 0 || meta.stripLens[i] > 24576) return false;
+    if (meta.stripLens[i] == 0 || meta.stripLens[i] > 22400) return false;
   }
 
   meta.dataOffset = LVC_HEADER_BASE + meta.capLen;
@@ -92,6 +92,45 @@ inline bool lvcReadMetaFromFile(const char* path, LvcMeta& meta) {
   }
   f.close();
   return true;
+}
+
+inline bool lvcVerifyFileComplete(const char* path, LvcMeta& meta) {
+  if (!lvcReadMetaFromFile(path, meta)) return false;
+  File f = LittleFS.open(path, "r");
+  if (!f) return false;
+  size_t fileSize = f.size();
+  f.close();
+
+  uint32_t expectedSize = meta.dataOffset;
+  for (int i = 0; i < LVC_STRIP_COUNT; i++) {
+    expectedSize += meta.stripLens[i];
+  }
+  if (fileSize < expectedSize) {
+    meta.valid = false;
+    return false;
+  }
+  return true;
+}
+
+inline void lvcEnsureFreeSpace(size_t neededBytes, bool allowEvictCard0 = false) {
+  if (LittleFS.exists("/pending.lvc")) {
+    LittleFS.remove("/pending.lvc");
+  }
+  size_t total = LittleFS.totalBytes();
+  size_t used  = LittleFS.usedBytes();
+  size_t freeBytes = (total > used) ? (total - used) : 0;
+  size_t targetFree = neededBytes + 8192;
+
+  int minIdx = allowEvictCard0 ? 0 : 1;
+  for (int i = 4; i >= minIdx && freeBytes < targetFree; i--) {
+    char p[24];
+    snprintf(p, sizeof(p), "/card%d.lvc", i);
+    if (LittleFS.exists(p)) {
+      LittleFS.remove(p);
+      used = LittleFS.usedBytes();
+      freeBytes = (total > used) ? (total - used) : 0;
+    }
+  }
 }
 
 // Декодер одной полосы QOI565 (240*16 = 3840 пикселей)
@@ -168,9 +207,11 @@ inline void lvcPromotePendingCard(const char* pendingPath = "/pending.lvc") {
     snprintf(src, sizeof(src), "/card%d.lvc", i);
     snprintf(dst, sizeof(dst), "/card%d.lvc", i + 1);
     if (LittleFS.exists(src)) {
+      if (LittleFS.exists(dst)) LittleFS.remove(dst);
       LittleFS.rename(src, dst);
     }
   }
+  if (LittleFS.exists("/card0.lvc")) LittleFS.remove("/card0.lvc");
   LittleFS.rename(pendingPath, "/card0.lvc");
 }
 

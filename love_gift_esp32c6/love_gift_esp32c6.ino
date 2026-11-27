@@ -32,6 +32,7 @@
 #include <time.h>
 #include <sys/time.h>
 #include <math.h>
+#include "esp_timer.h"
 
 #include "app_types.h"
 #include "cyrillic_font.h"
@@ -39,7 +40,7 @@
 #include "web_ui.h"
 
 // --- ВЕРСИЯ ПРОШИВКИ И GITHUB АВТООБНОВЛЕНИЕ (OTA) ---
-#define FIRMWARE_VERSION "1.3.5"
+#define FIRMWARE_VERSION "1.3.6"
 
 static const char* OTA_VERSION_URL =
   "https://raw.githubusercontent.com/danilka-revin/rust_xv/main/ota/version.json";
@@ -69,9 +70,11 @@ static const char* DEFAULT_WIFI_SSID = "";
 static const char* DEFAULT_WIFI_PASS = "";
 
 static const uint8_t DNS_PORT = 53;
-static const unsigned long BTN_PRESS_DEBOUNCE_MS   = 16;
-static const unsigned long BTN_RELEASE_DEBOUNCE_MS = 70;
-static const unsigned long PAGE_SWITCH_COOLDOWN_MS = 320;
+static const unsigned long BTN_PRESS_DEBOUNCE_MS   = 15;
+static const unsigned long BTN_RELEASE_DEBOUNCE_MS = 60;
+static const unsigned long PAGE_SWITCH_COOLDOWN_MS = 280;
+static const unsigned long BTN1_HEART_HOLD_MS      = 10000UL;
+static const unsigned long BTN1_HOLD_UI_DELAY_MS   = 160UL;
 
 // --- ЦВЕТА И ПЕРЕЛИВЫ RGB565 ---
 static inline uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b) {
@@ -116,8 +119,89 @@ static const uint16_t COL_GOLD_SOFT  = 0xFE73;
 static const uint16_t COL_MINT_OK    = 0x57EA;
 static const uint16_t COL_MUTED      = 0xAD55;
 
-// --- ЭКРАН И ОФФСКРИН-БУФЕРЫ (0% МЕРЦАНИЙ) ---
-Adafruit_GC9A01A tft(TFT_CS, TFT_DC, TFT_RST);
+// --- ЭКРАН И ОФФСКРИН-БУФЕРЫ (0% МЕРЦАНИЙ, БЕЗ БЕЛОГО ШУМА ПРИ СТАРТЕ) ---
+class CleanGC9A01A : public Adafruit_GC9A01A {
+public:
+  CleanGC9A01A(int8_t cs, int8_t dc, int8_t rst) : Adafruit_GC9A01A(cs, dc, rst) {}
+
+  void beginNoSnow(uint32_t freq) {
+    invertOnCommand  = 0x21;
+    invertOffCommand = 0x20;
+    initSPI(freq);
+    sendCommand(0x28); // DISPOFF пока настраивается контроллер и очищается GRAM
+
+    static const uint8_t initSeq[] = {
+      0xEF, 0,
+      0xEB, 1, 0x14,
+      0xFE, 0,
+      0xEF, 0,
+      0xEB, 1, 0x14,
+      0x84, 1, 0x40,
+      0x85, 1, 0xFF,
+      0x86, 1, 0xFF,
+      0x87, 1, 0xFF,
+      0x88, 1, 0x0A,
+      0x89, 1, 0x21,
+      0x8A, 1, 0x00,
+      0x8B, 1, 0x80,
+      0x8C, 1, 0x01,
+      0x8D, 1, 0x01,
+      0x8E, 1, 0xFF,
+      0x8F, 1, 0xFF,
+      0xB6, 2, 0x00, 0x00,
+      0x36, 1, 0x48,
+      0x3A, 1, 0x05,
+      0x90, 4, 0x08, 0x08, 0x08, 0x08,
+      0xBD, 1, 0x06,
+      0xBC, 1, 0x00,
+      0xFF, 3, 0x60, 0x01, 0x04,
+      0xC3, 1, 0x13,
+      0xC4, 1, 0x13,
+      0xC9, 1, 0x22,
+      0xBE, 1, 0x11,
+      0xE1, 2, 0x10, 0x0E,
+      0xDF, 3, 0x21, 0x0C, 0x02,
+      0xF0, 6, 0x45, 0x09, 0x08, 0x08, 0x26, 0x2A,
+      0xF1, 6, 0x43, 0x70, 0x72, 0x36, 0x37, 0x6F,
+      0xF2, 6, 0x45, 0x09, 0x08, 0x08, 0x26, 0x2A,
+      0xF3, 6, 0x43, 0x70, 0x72, 0x36, 0x37, 0x6F,
+      0xED, 2, 0x1B, 0x0B,
+      0xAE, 1, 0x77,
+      0xCD, 1, 0x63,
+      0x70, 9, 0x07, 0x07, 0x04, 0x0E, 0x0F, 0x09, 0x07, 0x08, 0x03,
+      0xE8, 1, 0x34,
+      0x62, 12, 0x18, 0x0D, 0x71, 0xED, 0x70, 0x70, 0x18, 0x0F, 0x71, 0xEF, 0x70, 0x70,
+      0x63, 12, 0x18, 0x11, 0x71, 0xF1, 0x70, 0x70, 0x18, 0x13, 0x71, 0xF3, 0x70, 0x70,
+      0x64, 7, 0x28, 0x29, 0xF1, 0x01, 0xF1, 0x00, 0x07,
+      0x66, 10, 0x3C, 0x00, 0xCD, 0x67, 0x45, 0x45, 0x10, 0x00, 0x00, 0x00,
+      0x67, 10, 0x00, 0x3C, 0x00, 0x00, 0x00, 0x01, 0x54, 0x10, 0x32, 0x98,
+      0x74, 7, 0x10, 0x85, 0x80, 0x00, 0x00, 0x4E, 0x00,
+      0x98, 2, 0x3E, 0x07,
+      0x35, 0,
+      0x21, 0
+    };
+
+    const uint8_t* p = initSeq;
+    const uint8_t* end = initSeq + sizeof(initSeq);
+    while (p < end) {
+      uint8_t cmd = *p++;
+      uint8_t numArgs = *p++;
+      sendCommand(cmd, p, numArgs);
+      p += numArgs;
+    }
+
+    sendCommand(0x11); // SLPOUT
+    delay(120);
+
+    setRotation(0);
+    fillScreen(0x0000); // Полностью зануляем GRAM до включения дисплея!
+    delay(10);
+    sendCommand(0x29); // DISPON — сразу чистый чёрный экран без белого шума
+    delay(15);
+  }
+};
+
+CleanGC9A01A tft(TFT_CS, TFT_DC, TFT_RST);
 
 GFXcanvas16 heartCanvas(112, 100);     // Большое 3D-сердечко / буфер распаковки полос (22.4 КБ)
 GFXcanvas16 msgCanvas(172, 86);        // Поле текста на Стр.2 / блок дней / полоса 240x16 (29.6 КБ)
@@ -234,15 +318,26 @@ const char* LOVE_PHRASES[] = {
 };
 const int LOVE_PHRASES_COUNT = sizeof(LOVE_PHRASES) / sizeof(LOVE_PHRASES[0]);
 
-// --- АНТИДРЕБЕЗГ КНОПОК ---
+// --- АНТИДРЕБЕЗГ КНОПОК (5 мс высокоточный опрос через esp_timer) ---
 DebouncedButton btn1 = { BTN_1, false, false, 0 };
 DebouncedButton btn2 = { BTN_2, false, false, 0 };
+
+portMUX_TYPE btnMux = portMUX_INITIALIZER_UNLOCKED;
+volatile bool btn1TimerHeld = false;
+volatile unsigned long btn1TimerPressStartMs = 0;
+volatile bool btn2TimerHeld = false;
+volatile unsigned long btn2TimerPressStartMs = 0;
+volatile bool btn2TapQueued = false;
 
 unsigned long btn2PressStartMs = 0;
 bool btn2LongHandled = false;
 int lastHoldSecShown = 0;
 unsigned long lastPageSwitchMs = 0;
-unsigned long lastBtn1ActionMs = 0;
+
+bool btn1HoldUiActive = false;
+bool btn1HoldCompleted = false;
+unsigned long lastHoldUiFrameMs = 0;
+ScreenMode returnScreenAfterHold = SCREEN_TIMER;
 
 bool updateButton(DebouncedButton &b, unsigned long nowMs, bool &justPressed, bool &justReleased) {
   justPressed = false;
@@ -259,6 +354,27 @@ bool updateButton(DebouncedButton &b, unsigned long nowMs, bool &justPressed, bo
     else justReleased = true;
   }
   return b.stableState;
+}
+
+void buttonSamplerTimerCb(void* /*arg*/) {
+  unsigned long nowMs = millis();
+  bool b1P = false, b1R = false;
+  bool b2P = false, b2R = false;
+  bool b1Held = updateButton(btn1, nowMs, b1P, b1R);
+  bool b2Held = updateButton(btn2, nowMs, b2P, b2R);
+
+  portENTER_CRITICAL(&btnMux);
+  if (b1P) {
+    btn1TimerPressStartMs = nowMs;
+  }
+  btn1TimerHeld = b1Held;
+
+  if (b2P) {
+    btn2TimerPressStartMs = nowMs;
+    btn2TapQueued = true;
+  }
+  btn2TimerHeld = b2Held;
+  portEXIT_CRITICAL(&btnMux);
 }
 
 // ============================================================================
@@ -497,7 +613,13 @@ void pushNewMessageToHistory(const char* text, uint32_t epoch, const char* msgId
   if ((!text || text[0] == '\0') && !withPendingCard) return;
 
   if (withPendingCard && fsReady) {
-    lvcPromotePendingCard("/pending.lvc");
+    LvcMeta verifyMeta;
+    if (lvcVerifyFileComplete("/pending.lvc", verifyMeta)) {
+      lvcPromotePendingCard("/pending.lvc");
+    } else {
+      LittleFS.remove("/pending.lvc");
+      withPendingCard = false;
+    }
   } else if (fsReady) {
     lvcShiftEmptySlot0();
   }
@@ -516,6 +638,16 @@ void pushNewMessageToHistory(const char* text, uint32_t epoch, const char* msgId
   msgHistory[0].hasCard = withPendingCard;
 
   if (msgHistoryCount < MAX_MSG_HISTORY) msgHistoryCount++;
+
+  if (fsReady) {
+    for (int i = 0; i < msgHistoryCount; i++) {
+      if (msgHistory[i].hasCard) {
+        char path[16];
+        snprintf(path, sizeof(path), "/card%d.lvc", i);
+        if (!LittleFS.exists(path)) msgHistory[i].hasCard = false;
+      }
+    }
+  }
 
   if (msgId && msgId[0] != '\0') {
     strncpy(lastNtfyId, msgId, sizeof(lastNtfyId) - 1);
@@ -690,18 +822,18 @@ public:
   }
 };
 
-// Скачивает файл открытки .lvc потоково прямо в LittleFS (/pending.lvc) — всего 1 КБ RAM!
+// Скачивает файл открытки .lvc потоково прямо в LittleFS (/pending.lvc) с проверкой целостности!
 bool downloadLvcAttachmentToFlash(const char* url, char* outCaption, size_t outCapSize) {
   if (!fsReady || !url || url[0] == '\0') return false;
 
   WiFiClientSecure client;
   client.setInsecure();
-  client.setTimeout(6);
+  client.setTimeout(12);
 
   HTTPClient https;
   https.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-  https.setConnectTimeout(4500);
-  https.setTimeout(8000);
+  https.setConnectTimeout(6000);
+  https.setTimeout(18000);
   https.setReuse(false);
 
   if (!https.begin(client, String(url))) return false;
@@ -710,14 +842,57 @@ bool downloadLvcAttachmentToFlash(const char* url, char* outCaption, size_t outC
   bool ok = false;
 
   if (code == HTTP_CODE_OK && (totalLen == -1 || (totalLen >= LVC_HEADER_BASE && totalLen <= 250000))) {
+    size_t needed = (totalLen > 0) ? (size_t)totalLen : 150000;
+    lvcEnsureFreeSpace(needed, totalLen > 0);
+
     File f = LittleFS.open("/pending.lvc", "w");
     if (f) {
-      LvcFilePrint fp(f, 250000);
-      https.writeToStream(&fp);
+      size_t totalWritten = 0;
+      bool writeErr = false;
+
+      if (totalLen > 0) {
+        static uint8_t dlBuf[1024];
+        WiFiClient* stream = https.getStreamPtr();
+        unsigned long lastDataMs = millis();
+
+        while (totalWritten < (size_t)totalLen) {
+          size_t avail = stream->available();
+          if (avail > 0) {
+            size_t rem = (size_t)totalLen - totalWritten;
+            size_t toRead = avail;
+            if (toRead > sizeof(dlBuf)) toRead = sizeof(dlBuf);
+            if (toRead > rem) toRead = rem;
+
+            int rd = stream->readBytes(dlBuf, toRead);
+            if (rd > 0) {
+              size_t wr = f.write(dlBuf, (size_t)rd);
+              totalWritten += wr;
+              if (wr != (size_t)rd) {
+                writeErr = true;
+                break;
+              }
+              lastDataMs = millis();
+            }
+          } else {
+            if (!https.connected() && stream->available() == 0) break;
+            if (millis() - lastDataMs > 15000UL) {
+              writeErr = true;
+              break;
+            }
+            vTaskDelay(1);
+          }
+        }
+        if (totalWritten != (size_t)totalLen) writeErr = true;
+      } else {
+        LvcFilePrint fp(f, 250000);
+        https.writeToStream(&fp);
+        totalWritten = fp.totalWritten;
+        if (fp.overflow || totalWritten < LVC_HEADER_BASE) writeErr = true;
+      }
       f.close();
 
       LvcMeta meta;
-      if (!fp.overflow && fp.totalWritten >= LVC_HEADER_BASE && lvcReadMetaFromFile("/pending.lvc", meta)) {
+      if (!writeErr && lvcVerifyFileComplete("/pending.lvc", meta)) {
         if (meta.caption[0] != '\0') {
           strncpy(outCaption, meta.caption, outCapSize - 1);
           outCaption[outCapSize - 1] = '\0';
@@ -878,6 +1053,13 @@ void ntfyPollTask(void* /*param*/) {
     bool gotCard = false;
     if (newestAttachUrl[0] != '\0') {
       gotCard = downloadLvcAttachmentToFlash(newestAttachUrl, newestText, sizeof(newestText));
+      if (!gotCard) {
+        vTaskDelay(pdMS_TO_TICKS(250));
+        gotCard = downloadLvcAttachmentToFlash(newestAttachUrl, newestText, sizeof(newestText));
+      }
+      if (!gotCard && (newestText[0] == '\0' || strstr(newestText, "You received a file:") != nullptr)) {
+        snprintf(newestText, sizeof(newestText), "Открытка не загрузилась :(");
+      }
     }
     strncpy(pendingMsgId, newestId, sizeof(pendingMsgId) - 1);
     pendingMsgId[sizeof(pendingMsgId) - 1] = '\0';
@@ -1479,7 +1661,7 @@ void drawMessagesStatic() {
   } else {
     drawCenteredUTF8(tft, 156, "—", COL_MUTED, COL_BG, 1);
   }
-  drawCenteredUTF8(tft, 173, "Кн.1 - послать ♥ в ответ", COL_PINK_SOFT, COL_BG, 1);
+  drawCenteredUTF8(tft, 173, "Кн.1 (10с) - послать ♥", COL_PINK_SOFT, COL_BG, 1);
 
   drawPageDots(2, false);
   msgNeedsRewrap = true;
@@ -1643,6 +1825,111 @@ void drawPulseStatic() {
   }
 }
 
+void drawTinyHeartOnCanvas(GFXcanvas16 &cv, int16_t cx, int16_t cy, float radiusPx, uint16_t fillCol, uint16_t borderCol) {
+  int r = (int)ceilf(radiusPx) + 2;
+  float invR = 1.0f / radiusPx;
+  for (int dy = -r; dy <= r; dy++) {
+    int py = cy + dy;
+    if (py < 0 || py >= cv.height()) continue;
+    float ym = (-(float)dy) * invR + 0.12f;
+    float ym2 = ym * ym;
+    float ym3 = ym2 * ym;
+    for (int dx = -r; dx <= r; dx++) {
+      int px = cx + dx;
+      if (px < 0 || px >= cv.width()) continue;
+      float xm = ((float)dx) * invR;
+      float xm2 = xm * xm;
+      float a = xm2 + ym2 - 1.0f;
+      float v = a * a * a - xm2 * ym3;
+      if (v <= 0.0f) {
+        cv.drawPixel(px, py, fillCol);
+      } else if (borderCol != fillCol && v <= 0.45f) {
+        cv.drawPixel(px, py, borderCol);
+      }
+    }
+  }
+}
+
+void drawHeartHoldStatic() {
+  tft.fillScreen(COL_BG);
+  drawDecorativeRings();
+  drawCenteredUTF8(tft, 22, "ОТПРАВИТЬ СЕРДЕЧКО?", COL_PINK_SOFT, COL_BG, 1);
+  drawCenteredUTF8(tft, 194, "Отпусти — отмена", COL_MUTED, COL_BG, 1);
+}
+
+void renderHeartHoldBarBuffered(unsigned long heldMs, unsigned long totalMs, unsigned long nowMs) {
+  const int W = 172;
+  const int H = 52;
+  float p = (float)heldMs / (float)totalMs;
+  if (p < 0.0f) p = 0.0f;
+  if (p > 1.0f) p = 1.0f;
+
+  int secLeft = (int)((totalMs > heldMs) ? ((totalMs - heldMs + 999UL) / 1000UL) : 0UL);
+  char hdr[32];
+  if (secLeft > 0) {
+    snprintf(hdr, sizeof(hdr), "Удерживай: %d с", secLeft);
+  } else {
+    snprintf(hdr, sizeof(hdr), "Отправляем ♥!");
+  }
+
+  msgCanvas.fillScreen(COL_BG);
+  drawCenteredUTF8(msgCanvas, 2, hdr, COL_GOLD_SOFT, COL_BG, 1, W);
+
+  const int bx = 4;
+  const int by = 18;
+  const int bw = 164;
+  const int bh = 22;
+
+  uint8_t sr, sg, sb;
+  evalShimmerRGB(nowMs * 0.0012f, sr, sg, sb);
+  uint16_t borderCol = rgb565(sr, sg, sb);
+
+  msgCanvas.fillRoundRect(bx, by, bw, bh, 11, COL_CARD_BG);
+
+  int fillW = (int)roundf((float)(bw - 6) * p);
+  if (fillW > 0) {
+    int innerX = bx + 3;
+    int innerY = by + 3;
+    int innerH = bh - 6;
+    for (int x = 0; x < fillW; x++) {
+      float xp = (float)x / (float)(bw - 6);
+      uint8_t r, g, b;
+      evalShimmerRGB(nowMs * 0.0008f + xp * 0.45f, r, g, b);
+      uint16_t col = rgb565(r, g, b);
+      for (int y = 0; y < innerH; y++) {
+        // Скругляем левый край и правый край заполнения
+        int rx = innerX + x;
+        int ry = innerY + y;
+        int dxL = (x < 6) ? (6 - x) : 0;
+        int dyC = abs(y - (innerH / 2));
+        if (dxL > 0 && (dxL * dxL + dyC * dyC > 46)) continue;
+        msgCanvas.drawPixel(rx, ry, col);
+      }
+    }
+  }
+
+  msgCanvas.drawRoundRect(bx, by, bw, bh, 11, borderCol);
+
+  // 5 сердечек-вех вдоль бара (20%, 40%, 60%, 80%, 100%)
+  for (int i = 1; i <= 5; i++) {
+    float m = i * 0.2f;
+    int16_t hx = bx + 8 + (int16_t)roundf((bw - 16) * (m - 0.1f));
+    int16_t hy = by + bh / 2;
+    bool reached = (p >= m);
+    float rad = reached ? 5.2f : 4.2f;
+    uint16_t hFill = reached ? 0xFFFF : dim565(COL_PINK_SOFT, 85);
+    uint16_t hEdge = reached ? COL_PINK_HOT : COL_RING_DIM;
+    drawTinyHeartOnCanvas(msgCanvas, hx, hy, rad, hFill, hEdge);
+  }
+
+  // Бегущее яркое сердечко на краю прогресс-бара
+  int16_t tipX = bx + 6 + fillW;
+  if (tipX > bx + bw - 8) tipX = bx + bw - 8;
+  drawTinyHeartOnCanvas(msgCanvas, tipX, by + bh / 2, 5.6f, COL_GOLD_SOFT, 0xFFFF);
+
+  tft.drawRGBBitmap(34, 136, msgCanvas.getBuffer(), W, H);
+}
+
 // Стирает кольцо без зазоров (через точные горизонтальные хорды) и рисует сияющий обод
 void drawIrisClosingRing(int rOuter, int rInner, unsigned long nowMs) {
   if (rInner < 0) rInner = 0;
@@ -1736,6 +2023,7 @@ void stepPageTransition(unsigned long nowMs) {
 
     if (targetStep > transStripStep) {
       LvcMeta meta;
+      bool cardDrawnOk = false;
       if (lvcReadMetaFromFile("/card0.lvc", meta)) {
         File f = LittleFS.open("/card0.lvc", "r");
         if (f) {
@@ -1764,7 +2052,14 @@ void stepPageTransition(unsigned long nowMs) {
             }
           }
           f.close();
+          cardDrawnOk = true;
         }
+      }
+      if (!cardDrawnOk) {
+        if (msgHistoryCount > 0) msgHistory[0].hasCard = false;
+        drawMessagesStatic();
+        transActive = false;
+        return;
       }
       if (targetStep >= 7) {
         drawPageDots(2, true);
@@ -2480,37 +2775,73 @@ void scrollNextPage() {
   beginPageTransition(nextMode);
 }
 
-bool btn1HandledCurrentPress = false;
-bool btn2HandledCurrentPress = false;
-
 void handleButtons(unsigned long nowMs) {
-  bool b1Pressed = false, b1Released = false;
-  bool b2Pressed = false, b2Released = false;
+  bool b1Held = false;
+  unsigned long b1HoldStart = 0;
+  bool b2Tap = false;
+  bool b2Held = false;
+  unsigned long b2HoldStart = 0;
 
-  updateButton(btn1, nowMs, b1Pressed, b1Released);
-  bool b2Held = updateButton(btn2, nowMs, b2Pressed, b2Released);
+  portENTER_CRITICAL(&btnMux);
+  b1Held = btn1TimerHeld;
+  b1HoldStart = btn1TimerPressStartMs;
+  b2Tap = btn2TapQueued;
+  btn2TapQueued = false;
+  b2Held = btn2TimerHeld;
+  b2HoldStart = btn2TimerPressStartMs;
+  portEXIT_CRITICAL(&btnMux);
 
-  if (b1Pressed) {
-    btn1HandledCurrentPress = true;
-    if ((nowMs - lastBtn1ActionMs) >= PAGE_SWITCH_COOLDOWN_MS) {
-      lastBtn1ActionMs = nowMs;
-      triggerLovePulse(true);
+  // Кнопка 1: удержание 10 секунд для отправки ответного сердечка (защита от спама)
+  if (b1Held && !btn1HoldCompleted && !bannerActive) {
+    unsigned long heldMs = (nowMs >= b1HoldStart) ? (nowMs - b1HoldStart) : 0UL;
+    if (heldMs >= BTN1_HOLD_UI_DELAY_MS) {
+      if (!btn1HoldUiActive) {
+        ScreenMode cur = transActive ? transTarget : currentScreen;
+        if (cur == SCREEN_PULSE) cur = returnScreenAfterPulse;
+        returnScreenAfterHold = cur;
+        transActive = false;
+        btn1HoldUiActive = true;
+        lastHoldUiFrameMs = 0;
+        drawHeartHoldStatic();
+      }
+
+      if (heldMs >= BTN1_HEART_HOLD_MS) {
+        btn1HoldCompleted = true;
+        btn1HoldUiActive = false;
+        currentScreen = returnScreenAfterHold;
+        triggerLovePulse(true);
+      } else if (lastHoldUiFrameMs == 0 || (nowMs - lastHoldUiFrameMs) >= 30) {
+        lastHoldUiFrameMs = nowMs;
+        float progress = (float)heldMs / (float)BTN1_HEART_HOLD_MS;
+        if (progress > 1.0f) progress = 1.0f;
+        renderBigHeartFrame(64, 34, nowMs, progress >= 0.20f, 0.78f + 0.28f * progress);
+        renderHeartHoldBarBuffered(heldMs, BTN1_HEART_HOLD_MS, nowMs);
+      }
     }
-  } else if (b1Released) {
-    btn1HandledCurrentPress = false;
+  } else if (!b1Held) {
+    if (btn1HoldUiActive) {
+      btn1HoldUiActive = false;
+      if (apActive || returnScreenAfterHold == SCREEN_AP_SETUP) {
+        currentScreen = SCREEN_AP_SETUP;
+        screenNeedsFullRedraw = true;
+      } else {
+        beginPageTransition(returnScreenAfterHold);
+      }
+    }
+    btn1HoldCompleted = false;
   }
 
-  if (b2Pressed) {
-    btn2PressStartMs = nowMs;
+  // Кнопка 2: мгновенное переключение страниц (отлавливается каждые 5 мс через esp_timer) + сброс Wi-Fi 4с
+  if (b2Tap) {
+    btn2PressStartMs = b2HoldStart;
     btn2LongHandled = false;
     lastHoldSecShown = 0;
-    btn2HandledCurrentPress = true;
-    if (!apActive && !bannerActive && (nowMs - lastPageSwitchMs) >= PAGE_SWITCH_COOLDOWN_MS) {
+    if (!btn1HoldUiActive && !apActive && !bannerActive && (nowMs - lastPageSwitchMs) >= PAGE_SWITCH_COOLDOWN_MS) {
       lastPageSwitchMs = nowMs;
       scrollNextPage();
     }
-  } else if (b2Held && !btn2LongHandled) {
-    unsigned long held = nowMs - btn2PressStartMs;
+  } else if (b2Held && !btn2LongHandled && !btn1HoldUiActive) {
+    unsigned long held = (nowMs >= btn2PressStartMs) ? (nowMs - btn2PressStartMs) : 0UL;
     if (held >= 1200 && held < 4000) {
       int secLeft = 4 - (int)(held / 1000);
       if (secLeft != lastHoldSecShown) {
@@ -2527,8 +2858,7 @@ void handleButtons(unsigned long nowMs) {
       delay(600);
       resetWifiSettings();
     }
-  } else if (b2Released) {
-    btn2HandledCurrentPress = false;
+  } else if (!b2Held) {
     if (!btn2LongHandled && lastHoldSecShown > 0) {
       renderHoldHintBuffered("");
       lastHoldSecShown = 0;
@@ -2541,6 +2871,9 @@ void handleButtons(unsigned long nowMs) {
 // ============================================================================
 
 void setup() {
+  pinMode(TFT_RST, OUTPUT);
+  digitalWrite(TFT_RST, LOW);
+
   pinMode(BTN_1, INPUT_PULLUP);
   pinMode(BTN_2, INPUT_PULLUP);
 
@@ -2548,9 +2881,18 @@ void setup() {
   btn2.rawState = btn2.stableState = (digitalRead(BTN_2) == HIGH);
   btn1.lastChangeMs = btn2.lastChangeMs = millis();
 
+  esp_timer_create_args_t btnTimerArgs = {};
+  btnTimerArgs.callback = &buttonSamplerTimerCb;
+  btnTimerArgs.arg = nullptr;
+  btnTimerArgs.dispatch_method = ESP_TIMER_TASK;
+  btnTimerArgs.name = "btn_poll";
+  esp_timer_handle_t btnTimer = nullptr;
+  if (esp_timer_create(&btnTimerArgs, &btnTimer) == ESP_OK) {
+    esp_timer_start_periodic(btnTimer, 5000);
+  }
+
   SPI.begin(19, 20, 18, TFT_CS);
-  tft.begin(40000000);
-  tft.setRotation(0);
+  tft.beginNoSnow(40000000);
 
   playBootAnimation();
 
@@ -2657,12 +2999,12 @@ void loop() {
     }
   }
 
-  if (weatherNeedsRedraw && currentScreen == SCREEN_WEATHER && !transActive && !bannerActive) {
+  if (weatherNeedsRedraw && currentScreen == SCREEN_WEATHER && !transActive && !bannerActive && !btn1HoldUiActive) {
     weatherNeedsRedraw = false;
     screenNeedsFullRedraw = true;
   }
 
-  if (incomingMsgPendingApply) {
+  if (incomingMsgPendingApply && !btn1HoldUiActive) {
     pushNewMessageToHistory(pendingMsgText, pendingMsgEpoch, pendingMsgId, pendingMsgHasCard);
     incomingMsgPendingApply = false;
     if (!apActive && !bannerActive) {
@@ -2670,13 +3012,18 @@ void loop() {
     }
   }
 
-  if (otaUpdateReady && !bannerActive) {
+  if (otaUpdateReady && !bannerActive && !btn1HoldUiActive) {
     performOtaUpdate();
     lastFrameMs = millis();
     return;
   }
 
   handleButtons(nowMs);
+
+  if (btn1HoldUiActive) {
+    delay(2);
+    return;
+  }
 
   if (bannerActive) {
     if ((long)(nowMs - bannerUntilMs) >= 0) {
