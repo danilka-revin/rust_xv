@@ -73,12 +73,11 @@ static const uint8_t PROGMEM CYRILLIC_5X7[66][5] = {
   { 0x38, 0x55, 0x54, 0x55, 0x18 }, // 65: ё
 };
 
-// Рисует один кириллический глиф 5x7 в масштабе size
-inline void drawCyrillicGlyph(Adafruit_GFX &gfx, int16_t x, int16_t y, int glyphIdx, uint16_t color, uint16_t bg, uint8_t size) {
-  if (glyphIdx < 0 || glyphIdx >= 66) return;
+// Общий компактный рендерер 5x7 глифа (экономит Flash)
+static inline void drawBitmap5x7(Adafruit_GFX &gfx, int16_t x, int16_t y, const uint8_t cols[5], bool fromProgmem, uint16_t color, uint16_t bg, uint8_t size) {
   gfx.startWrite();
   for (int8_t col = 0; col < 5; col++) {
-    uint8_t line = pgm_read_byte(&CYRILLIC_5X7[glyphIdx][col]);
+    uint8_t line = fromProgmem ? pgm_read_byte(&cols[col]) : cols[col];
     for (int8_t row = 0; row < 8; row++, line >>= 1) {
       if (line & 1) {
         if (size == 1) gfx.writePixel(x + col, y + row, color);
@@ -94,6 +93,12 @@ inline void drawCyrillicGlyph(Adafruit_GFX &gfx, int16_t x, int16_t y, int glyph
     else gfx.writeFillRect(x + 5 * size, y, size, 8 * size, bg);
   }
   gfx.endWrite();
+}
+
+// Рисует один кириллический глиф 5x7 в масштабе size
+inline void drawCyrillicGlyph(Adafruit_GFX &gfx, int16_t x, int16_t y, int glyphIdx, uint16_t color, uint16_t bg, uint8_t size) {
+  if (glyphIdx < 0 || glyphIdx >= 66) return;
+  drawBitmap5x7(gfx, x, y, CYRILLIC_5X7[glyphIdx], true, color, bg, size);
 }
 
 // Подсчёт видимой длины UTF-8 строки в символах (с игнорированием селектора U+FE0F у эмодзи ❤️)
@@ -114,28 +119,11 @@ inline uint16_t utf8CharCount(const char *str) {
 // Рисует аккуратное пиксельное сердечко 5x7
 inline void drawInlineHeartGlyph(Adafruit_GFX &gfx, int16_t x, int16_t y, uint16_t heartCol, uint16_t bg, uint8_t size) {
   static const uint8_t HEART_COLS[5] = { 0x0C, 0x1E, 0x3C, 0x1E, 0x0C };
-  gfx.startWrite();
-  for (int8_t col = 0; col < 5; col++) {
-    uint8_t line = HEART_COLS[col];
-    for (int8_t row = 0; row < 8; row++, line >>= 1) {
-      if (line & 1) {
-        if (size == 1) gfx.writePixel(x + col, y + row, heartCol);
-        else gfx.writeFillRect(x + col * size, y + row * size, size, size, heartCol);
-      } else if (bg != heartCol) {
-        if (size == 1) gfx.writePixel(x + col, y + row, bg);
-        else gfx.writeFillRect(x + col * size, y + row * size, size, size, bg);
-      }
-    }
-  }
-  if (bg != heartCol) {
-    if (size == 1) gfx.writeFastVLine(x + 5, y, 8, bg);
-    else gfx.writeFillRect(x + 5 * size, y, size, 8 * size, bg);
-  }
-  gfx.endWrite();
+  drawBitmap5x7(gfx, x, y, HEART_COLS, false, heartCol, bg, size);
 }
 
 // Вывод UTF-8 строки (русский + английский + цифры + • + — + ❤️) в координаты (x, y)
-inline void drawTextUTF8(Adafruit_GFX &gfx, int16_t x, int16_t y, const char *str, uint16_t color, uint16_t bg, uint8_t size) {
+static __attribute__((noinline)) void drawTextUTF8(Adafruit_GFX &gfx, int16_t x, int16_t y, const char *str, uint16_t color, uint16_t bg, uint8_t size) {
   int16_t curX = x;
   const int16_t step = 6 * size;
   const int16_t maxW = gfx.width();
@@ -203,7 +191,7 @@ inline void drawTextUTF8(Adafruit_GFX &gfx, int16_t x, int16_t y, const char *st
 }
 
 // Идеально центрированный вывод UTF-8 строки по ширине целевого экрана или GFXcanvas16
-inline void drawCenteredUTF8(Adafruit_GFX &gfx, int16_t y, const char *str, uint16_t color, uint16_t bg, uint8_t size, int16_t targetWidth = -1) {
+static __attribute__((noinline)) void drawCenteredUTF8(Adafruit_GFX &gfx, int16_t y, const char *str, uint16_t color, uint16_t bg, uint8_t size, int16_t targetWidth = -1) {
   int16_t w = (targetWidth > 0) ? targetWidth : gfx.width();
   uint16_t len = utf8CharCount(str);
   int16_t totalWidth = (len > 0) ? (len * 6 * size - size) : 0;

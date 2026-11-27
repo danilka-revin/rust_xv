@@ -1,23 +1,4 @@
-/*
- * Станция отношений — Маленький хранитель нашей любви
- * Плата:   Seeed Studio XIAO ESP32-C6
- * Экран:   Круглый TFT GC9A01A 240x240 (SPI 40 МГц)
- * Кнопки:  D0 (GPIO 0) и D1 (GPIO 1), активный уровень HIGH (с антидребезгом)
- * Питание: Аккумулятор 18650
- *
- * Что умеет (v1.2.0):
- * 1. Запоминает пароль домашнего Wi-Fi в энергонезависимой Flash-памяти (NVS) —
- *    не сбрасывается при перезапуске, разряде батареи и автообновлениях.
- * 2. Плавные анимации переключения 3 страниц на круглом экране по Кнопке 2 (D1):
- *    - Страница 1: Таймер отношений с 21.10.2026 + переливающееся сердечко по кругу + бегущая строка.
- *    - Страница 2: Полноэкранные открытки-послания из интернета (фото, разные шрифты, эмодзи, текст)
- *                  сохраняются в LittleFS, с плавным раскрытием от центра экрана!
- *    - Страница 3: Большое 3D-сердечко + адрес локального сайта и версия прошивки.
- * 3. Приём открыток и сообщений через бесплатный облачный канал ntfy.sh
- *    + ответное сердечко тебе на телефон по Кнопке 1 (D0)!
- * 4. Автообновление прошивки с GitHub по воздуху (HTTPS OTA).
- */
-
+// Станция отношений (Seeed Studio XIAO ESP32-C6 + GC9A01A 240x240)
 #include <SPI.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_GC9A01A.h>
@@ -90,6 +71,10 @@ static inline uint16_t dim565(uint16_t c, uint8_t alpha) {
   return (uint16_t)((r << 11) | (g << 5) | b);
 }
 
+static inline int iroundf(float v) {
+  return (v >= 0.0f) ? (int)(v + 0.5f) : (int)(v - 0.5f);
+}
+
 static inline void evalShimmerRGB(float phase, uint8_t &outR, uint8_t &outG, uint8_t &outB) {
   static const uint8_t PALETTE[5][3] = {
     { 255, 120, 175 },
@@ -98,11 +83,12 @@ static inline void evalShimmerRGB(float phase, uint8_t &outR, uint8_t &outG, uin
     { 255, 188, 118 },
     { 218,  96, 255 }
   };
-  float p = phase - floorf(phase);
+  float p = phase - (float)(int)phase;
+  if (p < 0.0f) p += 1.0f;
   float scaled = p * 5.0f;
   int idx0 = ((int)scaled) % 5;
   int idx1 = (idx0 + 1) % 5;
-  float frac = scaled - floorf(scaled);
+  float frac = scaled - (float)(int)scaled;
   float t = 0.5f - 0.5f * cosf(frac * PI);
 
   outR = (uint8_t)(PALETTE[idx0][0] + (PALETTE[idx1][0] - PALETTE[idx0][0]) * t);
@@ -128,9 +114,9 @@ public:
     invertOnCommand  = 0x21;
     invertOffCommand = 0x20;
     initSPI(freq);
-    sendCommand(0x28); // DISPOFF пока настраивается контроллер и очищается GRAM
+    sendCommand(0x28);
 
-    static const uint8_t initSeq[] = {
+    static const uint8_t initSeq[] PROGMEM = {
       0xEF, 0,
       0xEB, 1, 0x14,
       0xFE, 0,
@@ -181,22 +167,21 @@ public:
       0x21, 0
     };
 
-    const uint8_t* p = initSeq;
-    const uint8_t* end = initSeq + sizeof(initSeq);
-    while (p < end) {
-      uint8_t cmd = *p++;
-      uint8_t numArgs = *p++;
-      sendCommand(cmd, p, numArgs);
-      p += numArgs;
+    uint8_t argBuf[12];
+    size_t idx = 0;
+    while (idx < sizeof(initSeq)) {
+      uint8_t cmd = pgm_read_byte(&initSeq[idx++]);
+      uint8_t numArgs = pgm_read_byte(&initSeq[idx++]);
+      for (uint8_t i = 0; i < numArgs; i++) argBuf[i] = pgm_read_byte(&initSeq[idx++]);
+      sendCommand(cmd, argBuf, numArgs);
     }
 
-    sendCommand(0x11); // SLPOUT
+    sendCommand(0x11);
     delay(120);
-
     setRotation(0);
-    fillScreen(0x0000); // Полностью зануляем GRAM до включения дисплея!
+    fillScreen(0x0000);
     delay(10);
-    sendCommand(0x29); // DISPON — сразу чистый чёрный экран без белого шума
+    sendCommand(0x29);
     delay(15);
   }
 };
@@ -433,8 +418,8 @@ void buildTickerString(uint64_t totalDiffSec) {
 
   int chars = (int)utf8CharCount(tickerText);
   tickerLoopPx = (chars > 0) ? (chars * 6) : 1;
-  if (tickerScrollPx >= (float)tickerLoopPx) {
-    tickerScrollPx = fmodf(tickerScrollPx, (float)tickerLoopPx);
+  while (tickerScrollPx >= (float)tickerLoopPx) {
+    tickerScrollPx -= (float)tickerLoopPx;
   }
 }
 
@@ -692,37 +677,43 @@ size_t appendCodepointUtf8(uint16_t cp, char* out, size_t pos, size_t maxLen) {
   return pos;
 }
 
-int findJsonKeyColon(const String& json, const char* key, int startFrom = 0) {
-  String pat = String("\"") + key + "\"";
-  int searchFrom = startFrom;
-  const char* raw = json.c_str();
+int findJsonKeyColon(const char* raw, const char* key, int startFrom = 0) {
+  if (!raw || !key) return -1;
+  size_t rawLen = strlen(raw);
+  size_t kLen = strlen(key);
+  if ((size_t)startFrom >= rawLen) return -1;
+
+  const char* scan = raw + startFrom;
   while (true) {
-    int kPos = json.indexOf(pat, searchFrom);
-    if (kPos < 0) return -1;
-    bool validBefore = (kPos == 0);
-    if (!validBefore) {
-      int b = kPos - 1;
-      while (b > 0 && (raw[b] == ' ' || raw[b] == '\t' || raw[b] == '\n' || raw[b] == '\r')) b--;
-      validBefore = (raw[b] == '{' || raw[b] == ',');
+    const char* q1 = strchr(scan, '"');
+    if (!q1) return -1;
+    if (strncmp(q1 + 1, key, kLen) == 0 && q1[1 + kLen] == '"') {
+      int kPos = (int)(q1 - raw);
+      bool validBefore = (kPos == 0);
+      if (!validBefore) {
+        int b = kPos - 1;
+        while (b > 0 && (raw[b] == ' ' || raw[b] == '\t' || raw[b] == '\n' || raw[b] == '\r')) b--;
+        validBefore = (raw[b] == '{' || raw[b] == ',');
+      }
+      int afterKey = kPos + (int)kLen + 2;
+      while (raw[afterKey] == ' ' || raw[afterKey] == '\t' || raw[afterKey] == '\n' || raw[afterKey] == '\r') {
+        afterKey++;
+      }
+      if (validBefore && raw[afterKey] == ':') {
+        return afterKey;
+      }
     }
-    int afterKey = kPos + pat.length();
-    while (raw[afterKey] == ' ' || raw[afterKey] == '\t' || raw[afterKey] == '\n' || raw[afterKey] == '\r') {
-      afterKey++;
-    }
-    if (validBefore && raw[afterKey] == ':') {
-      return afterKey;
-    }
-    searchFrom = kPos + pat.length();
+    scan = q1 + 1;
   }
 }
 
-bool extractJsonStringUnescaped(const String& json, const char* key, char* outBuf, size_t outSize, int startFrom = 0) {
-  int colon = findJsonKeyColon(json, key, startFrom);
+bool extractJsonStringUnescaped(const char* raw, const char* key, char* outBuf, size_t outSize, int startFrom = 0) {
+  int colon = findJsonKeyColon(raw, key, startFrom);
   if (colon < 0) return false;
-  int q = json.indexOf('"', colon + 1);
-  if (q < 0) return false;
+  const char* q = strchr(raw + colon + 1, '"');
+  if (!q) return false;
 
-  const char* s = json.c_str() + q + 1;
+  const char* s = q + 1;
   size_t pos = 0;
   while (*s && pos + 1 < outSize) {
     if (*s == '"') {
@@ -757,10 +748,10 @@ bool extractJsonStringUnescaped(const String& json, const char* key, char* outBu
   return (pos > 0);
 }
 
-uint32_t extractJsonUintField(const String& json, const char* key) {
-  int colon = findJsonKeyColon(json, key);
+uint32_t extractJsonUintField(const char* raw, const char* key) {
+  int colon = findJsonKeyColon(raw, key);
   if (colon < 0) return 0;
-  const char* p = json.c_str() + colon + 1;
+  const char* p = raw + colon + 1;
   while (*p == ' ') p++;
   return (uint32_t)strtoul(p, nullptr, 10);
 }
@@ -794,10 +785,20 @@ bool parseSimpleFloat(const char* p, float &outVal) {
   return true;
 }
 
-bool extractJsonFloatField(const String& json, const char* key, float &outVal, int startFrom = 0) {
-  int colon = findJsonKeyColon(json, key, startFrom);
+bool extractJsonFloatField(const char* raw, const char* key, float &outVal, int startFrom = 0) {
+  int colon = findJsonKeyColon(raw, key, startFrom);
   if (colon < 0) return false;
-  return parseSimpleFloat(json.c_str() + colon + 1, outVal);
+  return parseSimpleFloat(raw + colon + 1, outVal);
+}
+
+bool beginHttpsClient(WiFiClientSecure &client, HTTPClient &https, const char* url, int sockSec, int connMs, int readMs, bool followRedirects = true) {
+  client.setInsecure();
+  client.setTimeout(sockSec);
+  if (followRedirects) https.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  https.setConnectTimeout(connMs);
+  https.setTimeout(readMs);
+  https.setReuse(false);
+  return https.begin(client, url);
 }
 
 class LvcFilePrint : public Stream {
@@ -827,16 +828,9 @@ bool downloadLvcAttachmentToFlash(const char* url, char* outCaption, size_t outC
   if (!fsReady || !url || url[0] == '\0') return false;
 
   WiFiClientSecure client;
-  client.setInsecure();
-  client.setTimeout(12);
-
   HTTPClient https;
-  https.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-  https.setConnectTimeout(6000);
-  https.setTimeout(18000);
-  https.setReuse(false);
+  if (!beginHttpsClient(client, https, url, 12, 6000, 18000)) return false;
 
-  if (!https.begin(client, String(url))) return false;
   int code = https.GET();
   int totalLen = https.getSize();
   bool ok = false;
@@ -963,10 +957,10 @@ public:
       return;
     }
     lineBuf[lineLen] = '\0';
-    String line(lineBuf);
+    const char* line = lineBuf;
+    while (*line == ' ' || *line == '\t') line++;
     lineLen = 0;
-    line.trim();
-    if (line.length() < 10) return;
+    if (strlen(line) < 10) return;
 
     char ev[24] = "";
     if (!extractJsonStringUnescaped(line, "event", ev, sizeof(ev))) return;
@@ -1022,19 +1016,12 @@ void ntfyPollTask(void* /*param*/) {
 
   {
     WiFiClientSecure client;
-    client.setInsecure();
-    client.setTimeout(5);
-
     HTTPClient https;
-    https.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-    https.setConnectTimeout(4500);
-    https.setTimeout(6000);
-    https.setReuse(false);
+    char url[160];
+    snprintf(url, sizeof(url), "https://ntfy.sh/%s/json?poll=1&since=%s",
+             NTFY_TOPIC, (lastNtfyId[0] != '\0') ? lastNtfyId : "48h");
 
-    String sinceArg = (lastNtfyId[0] != '\0') ? String(lastNtfyId) : String("48h");
-    String url = String("https://ntfy.sh/") + NTFY_TOPIC + "/json?poll=1&since=" + sinceArg;
-
-    if (https.begin(client, url)) {
+    if (beginHttpsClient(client, https, url, 5, 4500, 6000)) {
       httpCode = https.GET();
       if (httpCode == HTTP_CODE_OK) {
         NtfyLineStream parser(lineBuf, sizeof(lineBuf),
@@ -1074,28 +1061,24 @@ void ntfyPollTask(void* /*param*/) {
   vTaskDelete(nullptr);
 }
 
+bool canStartTlsSession(bool requireIdlePoll) {
+  if (requireIdlePoll && (ntfyPollRunning || weatherPollRunning || otaTaskRunning || otaUpdateReady)) return false;
+  return (WiFi.status() == WL_CONNECTED) && (ESP.getFreeHeap() >= 75000);
+}
+
 void startBackgroundNtfyPoll() {
-  if (ntfyPollRunning || weatherPollRunning || otaTaskRunning || otaUpdateReady) return;
-  if (WiFi.status() != WL_CONNECTED) return;
-  if (ESP.getFreeHeap() < 75000) return;
+  if (!canStartTlsSession(true)) return;
   ntfyPollRunning = true;
-  if (xTaskCreate(ntfyPollTask, "ntfy_in", 20480, nullptr, 1, nullptr) != pdPASS) {
-    ntfyPollRunning = false;
-  }
+  if (xTaskCreate(ntfyPollTask, "ntfy_in", 20480, nullptr, 1, nullptr) != pdPASS) ntfyPollRunning = false;
 }
 
 void ntfyReplyTask(void* /*param*/) {
   WiFiClientSecure client;
-  client.setInsecure();
-  client.setTimeout(5);
-
   HTTPClient https;
-  https.setConnectTimeout(4500);
-  https.setTimeout(5000);
-  https.setReuse(false);
+  char url[96];
+  snprintf(url, sizeof(url), "https://ntfy.sh/%s_reply", NTFY_TOPIC);
 
-  String url = String("https://ntfy.sh/") + NTFY_TOPIC + "_reply";
-  if (https.begin(client, url)) {
+  if (beginHttpsClient(client, https, url, 5, 4500, 5000, false)) {
     https.addHeader("Content-Type", "text/plain; charset=utf-8");
     https.POST("Она нажала кнопку на станции и прислала тебе сердечко!");
     https.end();
@@ -1107,15 +1090,10 @@ void ntfyReplyTask(void* /*param*/) {
 
 void sendCloudReplyHeart() {
   unsigned long now = millis();
-  if (ntfyReplyRunning || (now - lastReplySentMs < 5000UL)) return;
-  if (WiFi.status() != WL_CONNECTED) return;
-  if (ESP.getFreeHeap() < 75000) return;
-
+  if (ntfyReplyRunning || (now - lastReplySentMs < 5000UL) || !canStartTlsSession(false)) return;
   lastReplySentMs = now;
   ntfyReplyRunning = true;
-  if (xTaskCreate(ntfyReplyTask, "ntfy_out", 20480, nullptr, 1, nullptr) != pdPASS) {
-    ntfyReplyRunning = false;
-  }
+  if (xTaskCreate(ntfyReplyTask, "ntfy_out", 20480, nullptr, 1, nullptr) != pdPASS) ntfyReplyRunning = false;
 }
 
 // ============================================================================
@@ -1136,17 +1114,10 @@ const char* weatherCodeToRu(int code) {
 
 void weatherPollTask(void* /*param*/) {
   WiFiClientSecure client;
-  client.setInsecure();
-  client.setTimeout(5);
-
   HTTPClient https;
-  https.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-  https.setConnectTimeout(4500);
-  https.setTimeout(5000);
-  https.setReuse(false);
 
-  long latE4 = (long)roundf(weatherLat * 10000.0f);
-  long lonE4 = (long)roundf(weatherLon * 10000.0f);
+  long latE4 = (long)iroundf(weatherLat * 10000.0f);
+  long lonE4 = (long)iroundf(weatherLon * 10000.0f);
   bool latNeg = (latE4 < 0); if (latNeg) latE4 = -latE4;
   bool lonNeg = (lonE4 < 0); if (lonNeg) lonE4 = -lonE4;
 
@@ -1157,23 +1128,24 @@ void weatherPollTask(void* /*param*/) {
            latNeg ? "-" : "", latE4 / 10000L, latE4 % 10000L,
            lonNeg ? "-" : "", lonE4 / 10000L, lonE4 % 10000L);
 
-  if (https.begin(client, String(urlBuf))) {
+  if (beginHttpsClient(client, https, urlBuf, 5, 4500, 5000)) {
     int code = https.GET();
     if (code == HTTP_CODE_OK) {
       String body;
       BoundedStringPrint bp(body, 4096);
       https.writeToStream(&bp);
-      int curPos = findJsonKeyColon(body, "current");
+      const char* rawBody = body.c_str();
+      int curPos = findJsonKeyColon(rawBody, "current");
       if (curPos >= 0) {
         float t = 0.0f, app = 0.0f, wcode = 0.0f, wind = 0.0f;
-        if (extractJsonFloatField(body, "temperature_2m", t, curPos)) {
-          extractJsonFloatField(body, "apparent_temperature", app, curPos);
-          extractJsonFloatField(body, "weather_code", wcode, curPos);
-          extractJsonFloatField(body, "wind_speed_10m", wind, curPos);
-          weatherTempC  = (int)roundf(t);
-          weatherFeelsC = (int)roundf(app);
-          weatherCode   = (int)roundf(wcode);
-          weatherWindMs = (int)roundf(wind);
+        if (extractJsonFloatField(rawBody, "temperature_2m", t, curPos)) {
+          extractJsonFloatField(rawBody, "apparent_temperature", app, curPos);
+          extractJsonFloatField(rawBody, "weather_code", wcode, curPos);
+          extractJsonFloatField(rawBody, "wind_speed_10m", wind, curPos);
+          weatherTempC  = (int)iroundf(t);
+          weatherFeelsC = (int)iroundf(app);
+          weatherCode   = (int)iroundf(wcode);
+          weatherWindMs = (int)iroundf(wind);
           weatherValid  = true;
           weatherNeedsRedraw = true;
         }
@@ -1187,14 +1159,9 @@ void weatherPollTask(void* /*param*/) {
 }
 
 void startBackgroundWeatherPoll() {
-  if (weatherPollRunning || ntfyPollRunning || otaTaskRunning || otaUpdateReady) return;
-  if (WiFi.status() != WL_CONNECTED) return;
-  if (ESP.getFreeHeap() < 75000) return;
-
+  if (!canStartTlsSession(true)) return;
   weatherPollRunning = true;
-  if (xTaskCreate(weatherPollTask, "wx_poll", 20480, nullptr, 1, nullptr) != pdPASS) {
-    weatherPollRunning = false;
-  }
+  if (xTaskCreate(weatherPollTask, "wx_poll", 20480, nullptr, 1, nullptr) != pdPASS) weatherPollRunning = false;
 }
 
 // ============================================================================
@@ -1325,8 +1292,8 @@ void renderOrbitHeartBuffered(float exactSecond0to60, unsigned long nowMs) {
   float fx = 120.0f + cosf(angleRad) * R_ORBIT;
   float fy = 120.0f + sinf(angleRad) * R_ORBIT;
 
-  int16_t bx = (int16_t)roundf(fx) - (S / 2);
-  int16_t by = (int16_t)roundf(fy) - (S / 2);
+  int16_t bx = (int16_t)iroundf(fx) - (S / 2);
+  int16_t by = (int16_t)iroundf(fy) - (S / 2);
 
   if (prevOrbitBx > -500 && (abs(bx - prevOrbitBx) > 2 || abs(by - prevOrbitBy) > 2)) {
     clearOrbitPatchPreservingRing(prevOrbitBx, prevOrbitBy);
@@ -1521,7 +1488,7 @@ void renderMessageCardBuffered(float dtSec) {
         msgScrollPauseSec = 2.0f;
       }
     }
-    startY = innerPadY - (int16_t)roundf(msgScrollY);
+    startY = innerPadY - (int16_t)iroundf(msgScrollY);
   }
 
   for (int i = 0; i < wrappedLineCount; i++) {
@@ -1711,10 +1678,10 @@ void renderWeatherIconBuffered(unsigned long nowMs) {
     float baseAng = nowMs * 0.0012f;
     for (int i = 0; i < 8; i++) {
       float a = baseAng + i * (PI / 4.0f);
-      int16_t rx1 = sx + (int16_t)roundf(cosf(a) * (sr + 3));
-      int16_t ry1 = sy + (int16_t)roundf(sinf(a) * (sr + 3));
-      int16_t rx2 = sx + (int16_t)roundf(cosf(a) * (sr + 6));
-      int16_t ry2 = sy + (int16_t)roundf(sinf(a) * (sr + 6));
+      int16_t rx1 = sx + (int16_t)iroundf(cosf(a) * (sr + 3));
+      int16_t ry1 = sy + (int16_t)iroundf(sinf(a) * (sr + 3));
+      int16_t rx2 = sx + (int16_t)iroundf(cosf(a) * (sr + 6));
+      int16_t ry2 = sy + (int16_t)iroundf(sinf(a) * (sr + 6));
       msgCanvas.drawLine(rx1, ry1, rx2, ry2, COL_GOLD_SOFT);
     }
   }
@@ -1730,7 +1697,7 @@ void renderWeatherIconBuffered(unsigned long nowMs) {
 
   if (hasFog) {
     uint16_t fogCol = rgb565(180, 175, 205);
-    int16_t drift = (int16_t)roundf(sinf(nowMs * 0.002f) * 3.0f);
+    int16_t drift = (int16_t)iroundf(sinf(nowMs * 0.002f) * 3.0f);
     msgCanvas.fillRoundRect(10 + drift, 32, 36, 3, 1, fogCol);
     msgCanvas.fillRoundRect(14 - drift, 37, 28, 3, 1, COL_MUTED);
   }
@@ -1749,7 +1716,7 @@ void renderWeatherIconBuffered(unsigned long nowMs) {
   if (hasSnow) {
     int phase = (int)((nowMs / 100) % 12);
     for (int d = 0; d < 3; d++) {
-      int16_t dx = 18 + d * 10 + (int16_t)roundf(sinf(nowMs * 0.004f + d) * 2.0f);
+      int16_t dx = 18 + d * 10 + (int16_t)iroundf(sinf(nowMs * 0.004f + d) * 2.0f);
       int16_t dy = 29 + ((phase + d * 4) % 12);
       msgCanvas.fillCircle(dx, dy, 1, 0xFFFF);
     }
@@ -1826,7 +1793,7 @@ void drawPulseStatic() {
 }
 
 void drawTinyHeartOnCanvas(GFXcanvas16 &cv, int16_t cx, int16_t cy, float radiusPx, uint16_t fillCol, uint16_t borderCol) {
-  int r = (int)ceilf(radiusPx) + 2;
+  int r = (int)radiusPx + 3;
   float invR = 1.0f / radiusPx;
   for (int dy = -r; dy <= r; dy++) {
     int py = cy + dy;
@@ -1886,7 +1853,7 @@ void renderHeartHoldBarBuffered(unsigned long heldMs, unsigned long totalMs, uns
 
   msgCanvas.fillRoundRect(bx, by, bw, bh, 11, COL_CARD_BG);
 
-  int fillW = (int)roundf((float)(bw - 6) * p);
+  int fillW = (int)iroundf((float)(bw - 6) * p);
   if (fillW > 0) {
     int innerX = bx + 3;
     int innerY = by + 3;
@@ -1913,7 +1880,7 @@ void renderHeartHoldBarBuffered(unsigned long heldMs, unsigned long totalMs, uns
   // 5 сердечек-вех вдоль бара (20%, 40%, 60%, 80%, 100%)
   for (int i = 1; i <= 5; i++) {
     float m = i * 0.2f;
-    int16_t hx = bx + 8 + (int16_t)roundf((bw - 16) * (m - 0.1f));
+    int16_t hx = bx + 8 + (int16_t)iroundf((bw - 16) * (m - 0.1f));
     int16_t hy = by + bh / 2;
     bool reached = (p >= m);
     float rad = reached ? 5.2f : 4.2f;
@@ -1985,7 +1952,7 @@ void stepPageTransition(unsigned long nowMs) {
     float p = dt / 145.0f;
     if (p > 1.0f) p = 1.0f;
     float ease = p * p * (3.0f - 2.0f * p);
-    int curR = (int)roundf(118.0f * (1.0f - ease));
+    int curR = (int)iroundf(118.0f * (1.0f - ease));
 
     if (curR < transPrevR) {
       drawIrisClosingRing(transPrevR, curR, nowMs);
@@ -2076,7 +2043,7 @@ void stepPageTransition(unsigned long nowMs) {
 
   if (currentScreen == SCREEN_TIMER) {
     renderMiniHeartBuffered(106, 20, nowMs, false);
-    int16_t slide = (int16_t)roundf(62.0f * (1.0f - easeOut));
+    int16_t slide = (int16_t)iroundf(62.0f * (1.0f - easeOut));
 
     uint32_t nowUtc = 0, nowUsec = 0;
     if (getCurrentExactUtc(nowUtc, nowUsec)) {
@@ -2168,7 +2135,7 @@ void updateTimerDynamic(unsigned long nowMs, float dtSec) {
       snprintf(tickerText, sizeof(tickerText), "ПОДКЛЮЧАЕМСЯ К СЕРВЕРУ ТОЧНОГО ВРЕМЕНИ  •  ");
       tickerLoopPx = (int)utf8CharCount(tickerText) * 6;
     }
-    float waitOrbitSec = fmodf(nowMs / 250.0f, 60.0f);
+    float waitOrbitSec = (float)((nowMs / 250UL) % 60UL);
     renderOrbitHeartBuffered(waitOrbitSec, nowMs);
     renderTickerBuffered(dtSec);
     return;
@@ -2253,26 +2220,21 @@ bool isNewerVersion(const char* remoteVer, const char* localVer) {
 
 void otaCheckTask(void* /*param*/) {
   WiFiClientSecure client;
-  client.setInsecure();
-  client.setTimeout(5);
-
   HTTPClient https;
-  https.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-  https.setConnectTimeout(4500);
-  https.setTimeout(5000);
-  https.setReuse(false);
+  char url[160];
+  snprintf(url, sizeof(url), "%s?t=%lu", OTA_VERSION_URL, millis());
 
-  String url = String(OTA_VERSION_URL) + "?t=" + String(millis());
-  if (https.begin(client, url)) {
+  if (beginHttpsClient(client, https, url, 5, 4500, 5000)) {
     int code = https.GET();
     if (code == HTTP_CODE_OK) {
       String payload;
       BoundedStringPrint bp(payload, 2048);
       https.writeToStream(&bp);
+      const char* rawPayload = payload.c_str();
       char remVer[24] = "";
       char remBin[256] = "";
-      if (extractJsonStringUnescaped(payload, "version", remVer, sizeof(remVer)) &&
-          extractJsonStringUnescaped(payload, "bin_url", remBin, sizeof(remBin))) {
+      if (extractJsonStringUnescaped(rawPayload, "version", remVer, sizeof(remVer)) &&
+          extractJsonStringUnescaped(rawPayload, "bin_url", remBin, sizeof(remBin))) {
         if (isNewerVersion(remVer, FIRMWARE_VERSION)) {
           strncpy(otaPendingVersion, remVer, sizeof(otaPendingVersion) - 1);
           otaPendingVersion[sizeof(otaPendingVersion) - 1] = '\0';
@@ -2290,15 +2252,10 @@ void otaCheckTask(void* /*param*/) {
 }
 
 void startBackgroundOtaCheck() {
-  if (otaTaskRunning || otaUpdateReady || ntfyPollRunning || weatherPollRunning) return;
-  if (WiFi.status() != WL_CONNECTED) return;
-  if (ESP.getFreeHeap() < 75000) return;
-
+  if (!canStartTlsSession(true)) return;
   otaForceRequested = false;
   otaTaskRunning = true;
-  if (xTaskCreate(otaCheckTask, "ota_chk", 20480, nullptr, 1, nullptr) != pdPASS) {
-    otaTaskRunning = false;
-  }
+  if (xTaskCreate(otaCheckTask, "ota_chk", 20480, nullptr, 1, nullptr) != pdPASS) otaTaskRunning = false;
 }
 
 void renderOtaProgressBarBuffered(int percent) {
@@ -2334,18 +2291,10 @@ void performOtaUpdate() {
   renderOtaProgressBarBuffered(0);
 
   WiFiClientSecure client;
-  client.setInsecure();
-  client.setTimeout(15);
-
   HTTPClient https;
-  https.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-  https.setConnectTimeout(6000);
-  https.setTimeout(15000);
-  https.setReuse(false);
-
   bool success = false;
 
-  if (https.begin(client, String(otaPendingBinUrl))) {
+  if (beginHttpsClient(client, https, otaPendingBinUrl, 15, 6000, 15000)) {
     int code = https.GET();
     int totalLen = https.getSize();
 
@@ -2425,18 +2374,24 @@ void performOtaUpdate() {
 // WI-FI И ВСТРОЕННЫЙ ВЕБ-СЕРВЕР
 // ============================================================================
 
-String jsonEscape(const char* s) {
-  String out;
-  if (!s) return out;
+void appendJsonEscaped(String &out, const char* s) {
+  if (!s) return;
   while (*s) {
     char c = *s++;
-    if (c == '"') out += "\\\"";
-    else if (c == '\\') out += "\\\\";
-    else if (c == '\n') out += "\\n";
-    else if (c == '\r') { /* skip */ }
-    else if ((uint8_t)c >= 0x20) out += c;
+    if (c == '"') out += F("\\\"");
+    else if (c == '\\') out += F("\\\\");
+    else if (c == '\n') out += F("\\n");
+    else if (c != '\r' && (uint8_t)c >= 0x20) out += c;
   }
-  return out;
+}
+
+void appendJsonStrField(String &out, const char* key, const char* val, bool comma = true) {
+  if (comma) out += ',';
+  out += '"';
+  out += key;
+  out += F("\":\"");
+  appendJsonEscaped(out, val);
+  out += '"';
 }
 
 void startApPortal() {
@@ -2449,6 +2404,15 @@ void startApPortal() {
   transActive = false;
   currentScreen = SCREEN_AP_SETUP;
   screenNeedsFullRedraw = true;
+}
+
+void onWifiConnected(unsigned long nowMs) {
+  WiFi.setSleep(false);
+  wifiConnected = true;
+  configureNtp();
+  nextOtaCheckMs = nowMs + OTA_FIRST_CHECK_DELAY_MS;
+  nextNtfyPollMs = nowMs + 10000UL;
+  nextWeatherPollMs = nowMs + 14000UL;
 }
 
 bool connectToSavedWifi(unsigned long timeoutMs) {
@@ -2464,18 +2428,17 @@ bool connectToSavedWifi(unsigned long timeoutMs) {
   }
 
   if (WiFi.status() == WL_CONNECTED) {
-    WiFi.setSleep(false);
-    wifiConnected = true;
-    configureNtp();
-    nextOtaCheckMs = millis() + OTA_FIRST_CHECK_DELAY_MS;
-    nextNtfyPollMs = millis() + 10000UL;
-    nextWeatherPollMs = millis() + 14000UL;
+    onWifiConnected(millis());
     return true;
   }
 
   wifiConnected = false;
   return false;
 }
+
+static const char JSON_CT[] = "application/json; charset=utf-8";
+void sendJsonStr(int code, const char* body) { server.send(code, JSON_CT, body); }
+void sendJsonOk() { sendJsonStr(200, "{\"ok\":true}"); }
 
 void sendWebUiGzip() {
   server.sendHeader("Content-Encoding", "gzip");
@@ -2492,31 +2455,34 @@ void setupWebRoutes() {
     String ip = conn ? WiFi.localIP().toString() : WiFi.softAPIP().toString();
     String ssid = conn ? WiFi.SSID() : savedSsid;
 
-    String json = "{";
-    json += "\"connected\":" + String(conn ? "true" : "false") + ",";
-    json += "\"ssid\":\"" + jsonEscape(ssid.c_str()) + "\",";
-    json += "\"saved_ssid\":\"" + jsonEscape(savedSsid.c_str()) + "\",";
-    json += "\"has_saved_pass\":" + String(savedPass.length() > 0 ? "true" : "false") + ",";
-    json += "\"ip\":\"" + ip + "\",";
-    json += "\"tz_offset\":" + String(tzOffsetHours) + ",";
-    json += "\"weather_city\":\"" + jsonEscape(weatherCity.c_str()) + "\",";
-    json += "\"version\":\"" + String(FIRMWARE_VERSION) + "\"";
-    json += "}";
-    server.send(200, "application/json; charset=utf-8", json);
+    String json;
+    json.reserve(320);
+    char head[96];
+    snprintf(head, sizeof(head), "{\"connected\":%s,\"has_saved_pass\":%s,\"tz_offset\":%d",
+             conn ? "true" : "false", (savedPass.length() > 0) ? "true" : "false", tzOffsetHours);
+    json += head;
+    appendJsonStrField(json, "ssid", ssid.c_str());
+    appendJsonStrField(json, "saved_ssid", savedSsid.c_str());
+    appendJsonStrField(json, "ip", ip.c_str());
+    appendJsonStrField(json, "weather_city", weatherCity.c_str());
+    appendJsonStrField(json, "version", FIRMWARE_VERSION);
+    json += '}';
+    server.send(200, JSON_CT, json);
   });
 
   server.on("/api/weather", HTTP_GET, []() {
-    String json = "{";
-    json += "\"valid\":" + String(weatherValid ? "true" : "false") + ",";
-    json += "\"city\":\"" + jsonEscape(weatherCity.c_str()) + "\",";
-    json += "\"temp\":" + String((int)weatherTempC) + ",";
-    json += "\"feels\":" + String((int)weatherFeelsC) + ",";
-    json += "\"wind\":" + String((int)weatherWindMs) + ",";
-    json += "\"code\":" + String((int)weatherCode) + ",";
-    json += "\"desc\":\"" + jsonEscape(weatherCodeToRu(weatherCode)) + "\",";
-    json += "\"walkable\":true";
-    json += "}";
-    server.send(200, "application/json; charset=utf-8", json);
+    String json;
+    json.reserve(192);
+    char numPart[96];
+    snprintf(numPart, sizeof(numPart),
+             "{\"valid\":%s,\"temp\":%d,\"feels\":%d,\"wind\":%d,\"code\":%d,\"walkable\":true",
+             weatherValid ? "true" : "false", (int)weatherTempC, (int)weatherFeelsC,
+             (int)weatherWindMs, (int)weatherCode);
+    json += numPart;
+    appendJsonStrField(json, "city", weatherCity.c_str());
+    appendJsonStrField(json, "desc", weatherCodeToRu(weatherCode));
+    json += '}';
+    server.send(200, JSON_CT, json);
   });
 
   server.on("/api/weather_city", HTTP_POST, []() {
@@ -2539,27 +2505,33 @@ void setupWebRoutes() {
     weatherValid = false;
     nextWeatherPollMs = millis() + 200UL;
     if (currentScreen == SCREEN_WEATHER) screenNeedsFullRedraw = true;
-    server.send(200, "application/json; charset=utf-8", "{\"ok\":true}");
+    sendJsonOk();
   });
 
   server.on("/api/messages", HTTP_GET, []() {
-    String json = "{";
-    json += "\"unread\":" + String(unreadMessage ? "true" : "false") + ",";
-    json += "\"latest_text\":\"" + jsonEscape(msgHistoryCount > 0 ? msgHistory[0].text : "—") + "\",";
-    json += "\"latest_time\":" + String(msgHistoryCount > 0 ? msgHistory[0].epoch : 0) + ",";
-    json += "\"latest_has_card\":" + String((msgHistoryCount > 0 && msgHistory[0].hasCard) ? "true" : "false") + ",";
-    json += "\"history\":[";
+    String json;
+    json.reserve(512);
+    char head[96];
+    snprintf(head, sizeof(head), "{\"unread\":%s,\"latest_time\":%lu,\"latest_has_card\":%s",
+             unreadMessage ? "true" : "false",
+             (unsigned long)(msgHistoryCount > 0 ? msgHistory[0].epoch : 0),
+             (msgHistoryCount > 0 && msgHistory[0].hasCard) ? "true" : "false");
+    json += head;
+    appendJsonStrField(json, "latest_text", msgHistoryCount > 0 ? msgHistory[0].text : "—");
+    json += F(",\"history\":[");
     for (int i = 0; i < msgHistoryCount; i++) {
-      if (i > 0) json += ",";
-      json += "{\"text\":\"" + jsonEscape(msgHistory[i].text) + "\",";
-      json += "\"time\":" + String(msgHistory[i].epoch) + ",";
-      json += "\"has_card\":" + String(msgHistory[i].hasCard ? "true" : "false") + "}";
+      if (i > 0) json += ',';
+      json += '{';
+      appendJsonStrField(json, "text", msgHistory[i].text, false);
+      char tail[48];
+      snprintf(tail, sizeof(tail), ",\"time\":%lu,\"has_card\":%s}",
+               (unsigned long)msgHistory[i].epoch, msgHistory[i].hasCard ? "true" : "false");
+      json += tail;
     }
-    json += "]}";
-    server.send(200, "application/json; charset=utf-8", json);
+    json += F("]}");
+    server.send(200, JSON_CT, json);
   });
 
-  // Отдаёт бинарную открытку /card<idx>.lvc на сайт станции для отрисовки 1-в-1!
   server.on("/api/card", HTTP_GET, []() {
     int idx = server.hasArg("idx") ? server.arg("idx").toInt() : 0;
     if (!fsReady || idx < 0 || idx >= MAX_MSG_HISTORY) {
@@ -2591,42 +2563,43 @@ void setupWebRoutes() {
         drawPageDots(pg, false);
       }
     }
-    server.send(200, "application/json", "{\"ok\":true}");
+    sendJsonOk();
   });
 
   server.on("/api/scan", HTTP_GET, []() {
     if (server.hasArg("refresh")) {
       WiFi.scanDelete();
       WiFi.scanNetworks(true);
-      server.send(200, "application/json; charset=utf-8", "{\"scanning\":true}");
+      sendJsonStr(200, "{\"scanning\":true}");
       return;
     }
 
     int n = WiFi.scanComplete();
-    if (n == WIFI_SCAN_FAILED) {
-      WiFi.scanNetworks(true);
-      server.send(200, "application/json; charset=utf-8", "{\"scanning\":true}");
-      return;
-    }
-    if (n == WIFI_SCAN_RUNNING) {
-      server.send(200, "application/json; charset=utf-8", "{\"scanning\":true}");
+    if (n < 0) {
+      if (n == WIFI_SCAN_FAILED) WiFi.scanNetworks(true);
+      sendJsonStr(200, "{\"scanning\":true}");
       return;
     }
 
-    String json = "[";
+    String json;
+    json.reserve(512);
+    json += '[';
     bool first = true;
     for (int i = 0; i < n && i < 15; i++) {
       String ssid = WiFi.SSID(i);
       if (ssid.length() == 0) continue;
-      if (!first) json += ",";
+      if (!first) json += ',';
       first = false;
       bool openNet = (WiFi.encryptionType(i) == WIFI_AUTH_OPEN);
-      json += "{\"ssid\":\"" + jsonEscape(ssid.c_str()) + "\",";
-      json += "\"rssi\":" + String(WiFi.RSSI(i)) + ",";
-      json += "\"open\":" + String(openNet ? "true" : "false") + "}";
+      json += '{';
+      appendJsonStrField(json, "ssid", ssid.c_str(), false);
+      char tail[40];
+      snprintf(tail, sizeof(tail), ",\"rssi\":%d,\"open\":%s}",
+               (int)WiFi.RSSI(i), openNet ? "true" : "false");
+      json += tail;
     }
-    json += "]";
-    server.send(200, "application/json; charset=utf-8", json);
+    json += ']';
+    server.send(200, JSON_CT, json);
   });
 
   server.on("/api/sync_time", HTTP_POST, []() {
@@ -2634,19 +2607,18 @@ void setupWebRoutes() {
       uint32_t ep = (uint32_t)strtoul(server.arg("epoch").c_str(), nullptr, 10);
       setSystemEpoch(ep);
     }
-    server.send(200, "application/json", "{\"ok\":true}");
+    sendJsonOk();
   });
 
   server.on("/api/pulse", HTTP_POST, []() {
-    server.send(200, "application/json", "{\"ok\":true}");
+    sendJsonOk();
     triggerLovePulse(true);
   });
 
   server.on("/api/ota_check", HTTP_POST, []() {
     otaForceRequested = true;
     startBackgroundOtaCheck();
-    server.send(200, "application/json; charset=utf-8",
-                "{\"ok\":true,\"message\":\"Проверяем GitHub... Если доступна новая версия, станция обновится автоматически.\"}");
+    sendJsonStr(200, "{\"ok\":true,\"message\":\"Проверяем GitHub... Если доступна новая версия, станция обновится автоматически.\"}");
   });
 
   server.on("/api/connect", HTTP_POST, []() {
@@ -2670,12 +2642,13 @@ void setupWebRoutes() {
 
     if (newSsid.length() == 0 || (WiFi.status() == WL_CONNECTED && newSsid == savedSsid && newPass.length() == 0)) {
       if (WiFi.status() == WL_CONNECTED) {
-        String homeIp = WiFi.localIP().toString();
-        server.send(200, "application/json; charset=utf-8", "{\"ok\":true,\"ip\":\"" + homeIp + "\"}");
+        char resp[48];
+        snprintf(resp, sizeof(resp), "{\"ok\":true,\"ip\":\"%s\"}", WiFi.localIP().toString().c_str());
+        sendJsonStr(200, resp);
         return;
       }
       if (newSsid.length() == 0) {
-        server.send(400, "application/json", "{\"ok\":false}");
+        sendJsonStr(400, "{\"ok\":false}");
         return;
       }
     }
@@ -2693,21 +2666,17 @@ void setupWebRoutes() {
     }
 
     if (WiFi.status() == WL_CONNECTED) {
-      WiFi.setSleep(false);
       savedSsid = newSsid;
       savedPass = passToTry;
       prefs.putString("ssid", savedSsid);
       prefs.putString("pass", savedPass);
 
-      wifiConnected = true;
-      configureNtp();
-      nextOtaCheckMs = millis() + OTA_FIRST_CHECK_DELAY_MS;
-      nextNtfyPollMs = millis() + 10000UL;
-      nextWeatherPollMs = millis() + 14000UL;
+      onWifiConnected(millis());
       String homeIp = WiFi.localIP().toString();
 
-      String resp = "{\"ok\":true,\"ip\":\"" + homeIp + "\"}";
-      server.send(200, "application/json; charset=utf-8", resp);
+      char resp[48];
+      snprintf(resp, sizeof(resp), "{\"ok\":true,\"ip\":\"%s\"}", homeIp.c_str());
+      sendJsonStr(200, resp);
 
       pendingDisableAp = true;
       disableApAtMs = millis() + 10000UL;
@@ -2715,7 +2684,7 @@ void setupWebRoutes() {
       showConnectedBanner(homeIp);
     } else {
       wifiConnected = false;
-      server.send(200, "application/json; charset=utf-8", "{\"ok\":false}");
+      sendJsonStr(200, "{\"ok\":false}");
     }
   });
 
@@ -2958,12 +2927,7 @@ void loop() {
 
     if (apActive && !pendingDisableAp) {
       if (nowConn) {
-        WiFi.setSleep(false);
-        wifiConnected = true;
-        configureNtp();
-        nextOtaCheckMs = nowMs + OTA_FIRST_CHECK_DELAY_MS;
-        nextNtfyPollMs = nowMs + 10000UL;
-        nextWeatherPollMs = nowMs + 14000UL;
+        onWifiConnected(nowMs);
         dnsServer.stop();
         WiFi.enableAP(false);
         apActive = false;
