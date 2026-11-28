@@ -674,6 +674,36 @@
     }
     .link-btn:hover { color: var(--text); background: var(--raised); }
 
+    .rot-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .rot-btn {
+      padding: 8px 4px;
+      border-radius: 10px;
+      border: 1px solid var(--border-strong);
+      background: var(--bg);
+      color: var(--text-2);
+      font-size: 12px;
+      font-family: inherit;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      transition: background-color 140ms cubic-bezier(0.22, 1, 0.36, 1), border-color 140ms cubic-bezier(0.22, 1, 0.36, 1), color 140ms;
+    }
+    .rot-btn:hover { background: var(--raised); color: var(--text); }
+    .rot-btn.active {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent-text);
+    }
+
     .hidden { display: none !important; }
   </style>
 </head>
@@ -773,6 +803,17 @@
       </button>
 
       <div class="alert" id="wifiAlert"></div>
+
+      <div class="divider" style="margin-top:16px; padding-top:16px;">
+        <span class="field-label">Поворот круглого экрана</span>
+        <div class="rot-grid" id="rotGrid">
+          <button type="button" class="rot-btn active" data-rot="0" onclick="setScreenRotation(0)"><span>0°</span><span style="font-size:11px; opacity:0.8;">Обычный</span></button>
+          <button type="button" class="rot-btn" data-rot="1" onclick="setScreenRotation(1)"><span>90°</span><span style="font-size:11px; opacity:0.8;">Вправо</span></button>
+          <button type="button" class="rot-btn" data-rot="2" onclick="setScreenRotation(2)"><span>180°</span><span style="font-size:11px; opacity:0.8;">Перевёрнут</span></button>
+          <button type="button" class="rot-btn" data-rot="3" onclick="setScreenRotation(3)"><span>270°</span><span style="font-size:11px; opacity:0.8;">Влево</span></button>
+        </div>
+        <div class="alert" id="rotAlert" style="margin-top:8px;"></div>
+      </div>
 
       <div id="otaBox" class="hidden divider">
         <div style="margin-bottom:16px; padding-bottom:16px; border-bottom:1px solid var(--border);">
@@ -1154,6 +1195,9 @@
           document.getElementById('tzSelect').value = String(data.tz_offset);
           updateLoveTimer();
         }
+        if (typeof data.rotation === 'number') {
+          updateRotButtons(data.rotation);
+        }
         if (data.version) {
           document.getElementById('fwVerText').textContent = 'v' + data.version;
         }
@@ -1230,6 +1274,26 @@
       } catch (e) {
         list.innerHTML = '<div style="text-align:center; padding:14px; color:var(--muted); font-size:13px;">Можно ввести название сети вручную ниже</div>';
       }
+    }
+
+    function updateRotButtons(rot) {
+      document.querySelectorAll('.rot-btn').forEach(b => {
+        b.classList.toggle('active', Number(b.getAttribute('data-rot')) === (rot & 3));
+      });
+    }
+
+    async function setScreenRotation(rot) {
+      updateRotButtons(rot);
+      const alertBox = document.getElementById('rotAlert');
+      try {
+        const res = await fetch('/api/rotation?rot=' + (rot & 3), { method: 'POST' });
+        if (res.ok && alertBox) {
+          alertBox.className = 'alert ok';
+          alertBox.style.display = 'block';
+          alertBox.textContent = 'Поворот экрана сохранён (' + ((rot & 3) * 90) + '°).';
+          setTimeout(() => { alertBox.style.display = 'none'; }, 2000);
+        }
+      } catch (e) {}
     }
 
     function escapeHtml(str) {

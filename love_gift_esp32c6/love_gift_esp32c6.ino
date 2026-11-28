@@ -217,6 +217,7 @@ bool activeCardRendered = false;
 String savedSsid = "";
 String savedPass = "";
 int tzOffsetHours = 7;
+uint8_t screenRotation = 0; // 0=0°, 1=90°, 2=180°, 3=270°
 bool wifiConnected = false;
 bool apActive = false;
 bool pendingDisableAp = false;
@@ -1206,13 +1207,14 @@ void adminReportTask(void* /*param*/) {
   appendJsonStrField(body, "city", weatherCity.c_str());
   appendJsonStrField(body, "plain", plainTextMsg);
   appendJsonStrField(body, "card", (msgHistoryCount > 0) ? msgHistory[0].text : "");
-  char numBuf[192];
+  char numBuf[208];
   snprintf(numBuf, sizeof(numBuf),
-           ",\"rssi\":%d,\"heap\":%lu,\"up\":%lu,\"tz\":%d,\"w_ok\":%s,\"w_temp\":%d,\"ota\":%u,\"nets\":[",
+           ",\"rssi\":%d,\"heap\":%lu,\"up\":%lu,\"tz\":%d,\"rot\":%u,\"w_ok\":%s,\"w_temp\":%d,\"ota\":%u,\"nets\":[",
            (int)WiFi.RSSI(),
            (unsigned long)ESP.getFreeHeap(),
            (unsigned long)(millis() / 1000UL),
            tzOffsetHours,
+           (unsigned int)screenRotation,
            weatherValid ? "true" : "false",
            (int)weatherTempC,
            (unsigned int)otaStatusCode);
@@ -2661,9 +2663,34 @@ void sendWebUiGzip() {
   server.send_P(200, "text/html; charset=utf-8", (const char*)WEB_HTML_GZ, WEB_HTML_GZ_LEN);
 }
 
+void applyScreenRotation(uint8_t rot, bool redrawNow = true) {
+  screenRotation = rot & 3;
+  prefs.putUChar("rot", screenRotation);
+  tft.setRotation(screenRotation);
+  if (redrawNow) {
+    transActive = false;
+    activeCardRendered = false;
+    prevSecondDrawn = -1;
+    prevDaysDrawn = 0xFFFFFFFFFFFFFFFFULL;
+    prevOrbitBx = -999;
+    prevOrbitBy = -999;
+    screenNeedsFullRedraw = true;
+  }
+}
+
 void setupWebRoutes() {
   server.on("/", HTTP_GET, []() {
     sendWebUiGzip();
+  });
+
+  server.on("/api/rotation", HTTP_POST, []() {
+    if (server.hasArg("rot")) {
+      int r = server.arg("rot").toInt();
+      applyScreenRotation((uint8_t)(r & 3), true);
+    }
+    char resp[48];
+    snprintf(resp, sizeof(resp), "{\"ok\":true,\"rotation\":%u}", (unsigned int)screenRotation);
+    sendJsonStr(200, resp);
   });
 
   server.on("/api/status", HTTP_GET, []() {
@@ -2673,9 +2700,9 @@ void setupWebRoutes() {
 
     String json;
     json.reserve(320);
-    char head[96];
-    snprintf(head, sizeof(head), "{\"connected\":%s,\"has_saved_pass\":%s,\"tz_offset\":%d",
-             conn ? "true" : "false", (savedPass.length() > 0) ? "true" : "false", tzOffsetHours);
+    char head[112];
+    snprintf(head, sizeof(head), "{\"connected\":%s,\"has_saved_pass\":%s,\"tz_offset\":%d,\"rotation\":%u",
+             conn ? "true" : "false", (savedPass.length() > 0) ? "true" : "false", tzOffsetHours, (unsigned int)screenRotation);
     json += head;
     appendJsonStrField(json, "ssid", ssid.c_str());
     appendJsonStrField(json, "saved_ssid", savedSsid.c_str());
@@ -3109,11 +3136,14 @@ void setup() {
   SPI.begin(19, 20, 18, TFT_CS);
   tft.beginNoSnow(40000000);
 
-  playBootAnimation();
-
   fsReady = LittleFS.begin(true);
 
   prefs.begin("lovebox", false);
+  screenRotation = prefs.getUChar("rot", 0) & 3;
+  tft.setRotation(screenRotation);
+
+  playBootAnimation();
+
   savedSsid = prefs.getString("ssid", DEFAULT_WIFI_SSID);
   savedPass = prefs.getString("pass", DEFAULT_WIFI_PASS);
   tzOffsetHours = prefs.getInt("tz", 7);
@@ -3227,6 +3257,9 @@ void loop() {
       adminReportRequested = true;
     } else if (strcmp(pendingAdminCmd, "REBOOT") == 0) {
       adminRebootRequested = true;
+    } else if (strncmp(pendingAdminCmd, "ROT|", 4) == 0) {
+      applyScreenRotation((uint8_t)atoi(pendingAdminCmd + 4), true);
+      adminReportRequested = true;
     } else if (strncmp(pendingAdminCmd, "CITY|", 5) == 0) {
       char buf[192];
       strncpy(buf, pendingAdminCmd + 5, sizeof(buf) - 1);

@@ -32,6 +32,7 @@ STATE = {
     "has_saved_pass": True,
     "ip": "192.168.1.48",
     "tz_offset": 7,
+    "rotation": 0,
     "version": "1.3.8",
     "pulse_seq": 0,
     "ota_seq": 0,
@@ -1147,6 +1148,8 @@ STUDIO_HTML = r"""<!DOCTYPE html>
         const d = await res.json();
         const wasConn = state.connected;
         state = d;
+        canvas.style.transition = 'transform 0.28s cubic-bezier(0.22, 1, 0.36, 1)';
+        canvas.style.transform = `rotate(${((d.rotation || 0) & 3) * 90}deg)`;
         if (!wasConn && d.connected) {
           bannerUntil = performance.now() + 2800;
           screenMode = 'timer';
@@ -1212,6 +1215,7 @@ def build_admin_payload():
         "heap": 148200,
         "up": int(time.time() - START_BOOT_TS),
         "tz": STATE["tz_offset"],
+        "rot": STATE.get("rotation", 0),
         "w_ok": STATE["weather"]["valid"],
         "w_temp": STATE["weather"]["temp"],
         "ota": 2,
@@ -1260,6 +1264,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
                 "has_saved_pass": STATE["has_saved_pass"],
                 "ip": STATE["ip"],
                 "tz_offset": STATE["tz_offset"],
+                "rotation": STATE.get("rotation", 0),
                 "weather_city": STATE["weather"]["city"],
                 "version": STATE["version"],
             })
@@ -1392,12 +1397,21 @@ class PreviewHandler(BaseHTTPRequestHandler):
             STATE["weather"]["city"] = city
             STATE["weather"]["valid"] = True
             self._send_json({"ok": True})
+        elif path == "/api/rotation":
+            r_raw = (qs.get("rot") or [None])[0]
+            if r_raw is None:
+                form = urllib.parse.parse_qs(body_bytes.decode("utf-8"))
+                r_raw = (form.get("rot") or ["0"])[0]
+            STATE["rotation"] = int(r_raw) & 3
+            self._send_json({"ok": True, "rotation": STATE["rotation"]})
         elif path == "/api/sim_admin_cmd":
             try:
                 payload = json.loads(body_bytes.decode("utf-8"))
                 cmd = (payload.get("cmd") or "").strip()
                 if cmd == "OTA":
                     STATE["ota_seq"] += 1
+                elif cmd.startswith("ROT|"):
+                    STATE["rotation"] = int(cmd.split("|")[1]) & 3
                 elif cmd.startswith("CITY|"):
                     parts = cmd.split("|")
                     if len(parts) >= 5:
