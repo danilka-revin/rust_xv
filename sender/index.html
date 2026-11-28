@@ -9,46 +9,226 @@
   <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Montserrat:wght@600;800&family=Playfair+Display:ital,wght@0,700;1,700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg-1: #180e16;
-      --bg-2: #281523;
-      --card: rgba(255, 255, 255, 0.065);
-      --border: rgba(255, 125, 170, 0.22);
-      --accent: #ff3d71;
-      --accent-2: #ff7aa0;
-      --text: #fff0f6;
-      --muted: #cca0b3;
+      --bg: #07050c;
+      --card: rgba(16, 12, 24, 0.78);
+      --border: rgba(255, 255, 255, 0.095);
+      --accent: #ff3d77;
+      --accent-2: #ff85ab;
+      --violet: #a855f7;
+      --text: #faf5f8;
+      --muted: #a694a8;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: linear-gradient(165deg, var(--bg-1) 0%, var(--bg-2) 100%);
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
       color: var(--text);
       min-height: 100vh;
-      padding: 16px 12px 44px;
+      padding: 20px 14px 52px;
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    /* React Bits: Soft Aurora + Dot Field */
+    .dot-field {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background-image: radial-gradient(rgba(255, 255, 255, 0.075) 1px, transparent 1px);
+      background-size: 24px 24px;
+      mask-image: radial-gradient(ellipse 85% 75% at 50% 25%, #000 35%, transparent 100%);
+      -webkit-mask-image: radial-gradient(ellipse 85% 75% at 50% 25%, #000 35%, transparent 100%);
+    }
+
+    .aurora-bg {
+      position: fixed;
+      inset: -20%;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+      filter: blur(72px);
+      opacity: 0.62;
+    }
+
+    .aurora-band {
+      position: absolute;
+      width: 68vmax;
+      height: 48vmax;
+      border-radius: 50%;
+      mix-blend-mode: screen;
+      animation: auroraDrift 16s ease-in-out infinite alternate;
+    }
+
+    .aurora-1 {
+      top: -14%;
+      left: -8%;
+      background: radial-gradient(circle, rgba(255, 61, 119, 0.48) 0%, rgba(168, 85, 247, 0.18) 52%, transparent 74%);
+    }
+
+    .aurora-2 {
+      bottom: -14%;
+      right: -8%;
+      background: radial-gradient(circle, rgba(168, 85, 247, 0.36) 0%, rgba(255, 133, 171, 0.16) 50%, transparent 74%);
+      animation-delay: -8s;
+      animation-duration: 21s;
+    }
+
+    @keyframes auroraDrift {
+      0% { transform: translate3d(0, 0, 0) scale(1) rotate(0deg); }
+      50% { transform: translate3d(6vw, 4vh, 0) scale(1.12) rotate(12deg); }
+      100% { transform: translate3d(-5vw, -3vh, 0) scale(0.95) rotate(-8deg); }
     }
 
     .wrap {
-      max-width: 470px;
+      max-width: 960px;
       margin: 0 auto;
+      position: relative;
+      z-index: 1;
+    }
+
+    .bento-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    @media (min-width: 880px) {
+      .bento-grid {
+        grid-template-columns: 1.15fr 0.85fr;
+        gap: 20px;
+      }
+    }
+
+    .side-col {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
     }
 
     .header {
       text-align: center;
-      margin-bottom: 14px;
+      margin-bottom: 20px;
     }
-    .header h1 { font-size: 19px; font-weight: 800; letter-spacing: -0.2px; }
-    .header p { font-size: 12.5px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
 
+    /* React Bits: BlurText + ShinyText */
+    .header h1 {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.6px;
+      background: linear-gradient(110deg, #ffffff 25%, #ffb6cf 48%, #ffffff 72%);
+      background-size: 220% 100%;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: blurReveal 0.65s cubic-bezier(0.22, 1, 0.36, 1) both, shineSweep 5.5s linear infinite;
+    }
+
+    .header p {
+      font-size: 13.5px;
+      color: var(--muted);
+      margin-top: 5px;
+      line-height: 1.45;
+      animation: blurReveal 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    .status-mark {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      padding: 5px 13px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.045);
+      border: 1px solid rgba(255, 255, 255, 0.11);
+      color: #dfd3e0;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #34d399;
+      box-shadow: 0 0 10px rgba(52, 211, 153, 0.8);
+    }
+
+    @keyframes blurReveal {
+      from { opacity: 0; filter: blur(8px); transform: translateY(6px); }
+      to { opacity: 1; filter: blur(0); transform: translateY(0); }
+    }
+
+    @keyframes shineSweep {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* React Bits: Border Glow + Spotlight Card */
     .card {
+      position: relative;
       background: var(--card);
-      backdrop-filter: blur(14px);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
       border: 1px solid var(--border);
-      border-radius: 22px;
-      padding: 16px 14px;
-      margin-bottom: 14px;
-      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+      border-radius: 26px;
+      padding: 20px 18px;
+      box-shadow: 0 18px 46px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+      --mx: 50%;
+      --my: 0%;
+      --glow-o: 0;
+    }
+
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      padding: 1.2px;
+      background: radial-gradient(260px circle at var(--mx) var(--my), rgba(255, 85, 145, 0.72), rgba(168, 85, 247, 0.36) 45%, transparent 72%);
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      opacity: var(--glow-o);
+      transition: opacity 0.28s ease;
+      pointer-events: none;
+    }
+
+    .card::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(340px circle at var(--mx) var(--my), rgba(255, 61, 119, 0.08), transparent 65%);
+      opacity: var(--glow-o);
+      transition: opacity 0.28s ease;
+      pointer-events: none;
+    }
+
+    .card > * {
+      position: relative;
+      z-index: 1;
+    }
+
+    .card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      gap: 8px;
+    }
+
+    .card-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 999px;
+      background: rgba(255, 61, 119, 0.14);
+      border: 1px solid rgba(255, 133, 171, 0.28);
+      color: #ffc2d6;
+      white-space: nowrap;
     }
 
     /* Круглая сцена 240x240 */
@@ -58,12 +238,13 @@
       align-items: center;
     }
     .watch-ring {
-      width: 266px;
-      height: 266px;
+      width: 268px;
+      height: 268px;
       border-radius: 50%;
-      padding: 13px;
-      background: linear-gradient(145deg, #3b2433, #130b10);
-      box-shadow: 0 14px 36px rgba(0,0,0,0.55), inset 0 2px 4px rgba(255,255,255,0.14);
+      padding: 14px;
+      background: linear-gradient(145deg, #2b1d2e, #0e0a12);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 18px 44px rgba(0,0,0,0.65), 0 0 36px rgba(255, 61, 119, 0.18), inset 0 1px 2px rgba(255,255,255,0.16);
       position: relative;
       touch-action: none;
     }
@@ -81,33 +262,39 @@
     .stage-hint {
       font-size: 11.5px;
       color: var(--muted);
-      margin-top: 8px;
+      margin-top: 9px;
       text-align: center;
     }
 
-    /* Вкладки инструментов */
+    /* Вкладки инструментов (Glass Pill Segment) */
     .tool-tabs {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
       gap: 6px;
-      margin: 14px 0 12px;
+      margin: 16px 0 14px;
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 4px;
     }
     .tool-tab {
-      border: 1px solid rgba(255, 130, 175, 0.22);
-      background: rgba(255, 255, 255, 0.05);
-      color: #ffdbe9;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted);
       border-radius: 12px;
       padding: 8px 4px;
       font-size: 11.5px;
       font-weight: 700;
       cursor: pointer;
       text-align: center;
-      transition: 0.15s;
+      transition: 0.18s;
     }
+    .tool-tab:hover { color: #fff; }
     .tool-tab.active {
-      background: linear-gradient(135deg, #ff3d71, #d62457);
-      border-color: #ff7ba1;
+      background: linear-gradient(135deg, rgba(255, 61, 119, 0.25), rgba(168, 85, 247, 0.2));
+      border-color: rgba(255, 133, 171, 0.36);
       color: #fff;
+      box-shadow: 0 4px 14px rgba(255, 61, 119, 0.18);
     }
 
     .panel { display: none; }
@@ -123,45 +310,52 @@
     .label-sm {
       font-size: 12px;
       font-weight: 700;
-      color: #ffd4e4;
+      color: #e4d4e6;
       margin-bottom: 6px;
       display: block;
     }
 
     .btn-sm {
-      border: 1px solid rgba(255, 135, 175, 0.34);
-      background: rgba(255, 61, 113, 0.16);
-      color: #ffe4ef;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.05);
+      color: #f3e6ef;
       border-radius: 11px;
-      padding: 8px 11px;
-      font-size: 12.5px;
-      font-weight: 700;
+      padding: 7px 11px;
+      font-size: 12px;
+      font-weight: 600;
       cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, transform 0.12s;
     }
-    .btn-sm:hover { background: rgba(255, 61, 113, 0.3); }
+    .btn-sm:hover { background: rgba(255, 255, 255, 0.10); border-color: rgba(255, 133, 171, 0.36); }
+    .btn-sm:active { transform: scale(0.97); }
     .btn-sm.primary {
-      background: linear-gradient(135deg, #ff3d71, #d62457);
-      border-color: transparent;
+      background: linear-gradient(135deg, #ff3d77, #c82257);
+      border-color: rgba(255, 165, 195, 0.38);
       color: #fff;
     }
 
     .input, textarea, select {
       width: 100%;
-      padding: 9px 11px;
-      border-radius: 12px;
-      border: 1.5px solid rgba(255, 130, 170, 0.28);
-      background: rgba(0, 0, 0, 0.32);
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: rgba(0, 0, 0, 0.36);
       color: #fff;
       font-size: 13.5px;
       font-family: inherit;
       outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
     }
-    textarea { min-height: 58px; resize: vertical; }
-    .input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+    textarea { min-height: 68px; resize: vertical; }
+    .input:focus, textarea:focus, select:focus {
+      border-color: rgba(255, 85, 145, 0.72);
+      box-shadow: 0 0 0 3px rgba(255, 61, 119, 0.16);
+    }
+    select option { background: #140f1c; color: #fff; }
 
     input[type="range"] {
       width: 100%;
-      accent-color: #ff3d71;
+      accent-color: #ff3d77;
       cursor: pointer;
     }
 
@@ -172,12 +366,12 @@
       align-items: center;
       margin-bottom: 8px;
       font-size: 12px;
-      color: #f3c6d8;
+      color: #d9c4d6;
     }
 
     .swatches {
       display: flex;
-      gap: 6px;
+      gap: 7px;
       flex-wrap: wrap;
       align-items: center;
       margin-bottom: 10px;
@@ -186,10 +380,11 @@
       width: 24px;
       height: 24px;
       border-radius: 50%;
-      border: 2px solid rgba(255,255,255,0.35);
+      border: 2px solid rgba(255,255,255,0.28);
       cursor: pointer;
+      transition: transform 0.15s, border-color 0.15s;
     }
-    .swatch.active { border-color: #fff; transform: scale(1.14); }
+    .swatch.active { border-color: #fff; transform: scale(1.16); }
 
     .emoji-grid {
       display: grid;
@@ -201,93 +396,133 @@
       font-size: 20px;
       padding: 6px 0;
       border-radius: 10px;
-      border: 1px solid rgba(255,255,255,0.10);
-      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.04);
       cursor: pointer;
       transition: 0.12s;
     }
-    .emoji-btn:hover { background: rgba(255,61,113,0.3); transform: scale(1.08); }
+    .emoji-btn:hover { background: rgba(255,61,119,0.25); transform: scale(1.08); }
 
     .layer-item {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 8px 10px;
-      border-radius: 11px;
-      background: rgba(0,0,0,0.28);
-      border: 1px solid rgba(255,255,255,0.1);
+      padding: 8px 11px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.035);
+      border: 1px solid var(--border);
       margin-bottom: 6px;
       font-size: 12.5px;
       cursor: pointer;
     }
     .layer-item.selected {
-      border-color: #ff4b7d;
-      background: rgba(255, 61, 113, 0.18);
+      border-color: rgba(255, 85, 145, 0.72);
+      background: rgba(255, 61, 119, 0.14);
     }
 
+    /* React Bits: Specular Button */
     .btn-send {
+      position: relative;
       width: 100%;
-      border: none;
+      border: 1px solid rgba(255, 165, 195, 0.42);
       border-radius: 16px;
-      padding: 14px 18px;
-      font-size: 15px;
-      font-weight: 800;
+      padding: 13px 18px;
+      font-size: 14.5px;
+      font-weight: 700;
       color: #fff;
-      background: linear-gradient(135deg, var(--accent) 0%, #d42054 100%);
-      box-shadow: 0 8px 22px rgba(255, 61, 113, 0.34);
+      background: linear-gradient(135deg, var(--accent) 0%, #c82257 100%);
+      box-shadow: 0 8px 24px rgba(255, 61, 119, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.28);
       cursor: pointer;
-      margin-top: 8px;
+      margin-top: 10px;
+      overflow: hidden;
+      transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.2s;
+      --bx: 50%;
+      --by: 50%;
     }
+    .btn-send::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(130px circle at var(--bx) var(--by), rgba(255, 255, 255, 0.28), transparent 65%);
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+    }
+    .btn-send:hover::after { opacity: 1; }
     .btn-send:active { transform: scale(0.98); }
     .btn-send:disabled { opacity: 0.6; cursor: wait; }
 
     .status {
       margin-top: 10px;
       padding: 10px 12px;
-      border-radius: 12px;
+      border-radius: 13px;
       font-size: 12.5px;
       line-height: 1.45;
       display: none;
     }
-    .status.ok { display: block; background: rgba(34,197,94,0.16); border: 1px solid rgba(34,197,94,0.45); color: #bbf7d0; }
-    .status.err { display: block; background: rgba(244,63,94,0.18); border: 1px solid rgba(244,63,94,0.45); color: #fecdd3; }
+    .status.ok { display: block; background: rgba(52,211,153,0.12); border: 1px solid rgba(52,211,153,0.36); color: #a7f3d0; }
+    .status.err { display: block; background: rgba(251,113,133,0.14); border: 1px solid rgba(251,113,133,0.38); color: #fecdd3; }
 
     .reply-item {
       margin-top: 8px;
-      padding: 9px 11px;
-      background: rgba(255, 61, 113, 0.14);
-      border: 1px solid rgba(255, 117, 151, 0.3);
-      border-radius: 11px;
-      color: #ffe4ee;
+      padding: 10px 12px;
+      background: rgba(255, 61, 119, 0.10);
+      border: 1px solid rgba(255, 133, 171, 0.24);
+      border-radius: 13px;
+      color: #f9e6ee;
       font-size: 12.5px;
+    }
+
+    .spark {
+      position: fixed;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 99;
+      background: #ff85ab;
+      box-shadow: 0 0 8px #ff3d77;
+      animation: sparkOut 0.48s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes sparkOut {
+      from { transform: translate(0, 0) scale(1); opacity: 1; }
+      to { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
     }
 
     details summary { cursor: pointer; font-size: 12.5px; color: var(--muted); font-weight: 600; }
   </style>
 </head>
 <body>
+  <div class="aurora-bg">
+    <div class="aurora-band aurora-1"></div>
+    <div class="aurora-band aurora-2"></div>
+  </div>
+  <div class="dot-field"></div>
+
   <div class="wrap">
     <div class="header">
-      <h1>🎨 Пульт станции отношений</h1>
-      <p>Открытки (стр. 2) и текстовые сообщения (стр. 3) через облако</p>
-    </div>
-
-    <div class="card">
-      <span class="label-sm" style="font-size:13.5px; margin-bottom:8px;">💬 Текстовое сообщение (3-я страница):</span>
-      <textarea id="plainTextInput" maxlength="280" placeholder="Напиши текстовое сообщение — оно откроется отдельно на 3-й странице, не перекрывая открытку ❤️"></textarea>
-      <button type="button" class="btn-send" id="sendPlainBtn" onclick="sendPlainTextMsg()" style="margin-top:10px;">
-        ✉️ Отправить текст на 3-ю страницу
-      </button>
-      <div class="status" id="plainStatus"></div>
-    </div>
-
-    <div class="card">
-      <div class="stage-wrap">
-        <div class="watch-ring">
-          <canvas id="editorCanvas" width="240" height="240"></canvas>
-        </div>
-        <div class="stage-hint">👆 Тяни любой элемент прямо пальцем или мышкой по кругу</div>
+      <h1>Пульт станции отношений</h1>
+      <p>Студия круглых открыток и мгновенных сообщений через облако</p>
+      <div class="status-mark">
+        <span class="status-dot"></span>
+        <span>Канал ntfy.sh активен</span>
       </div>
+    </div>
+
+    <div class="bento-grid">
+      <!-- ЛЕВАЯ КОЛОНКА: КОНСТРУКТОР ОТКРЫТОК (2-Я СТРАНИЦА) -->
+      <div class="card">
+        <div class="card-head">
+          <span class="label-sm" style="margin:0; font-size:14px;">🎨 Конструктор открытки</span>
+          <span class="card-badge">Страница 2</span>
+        </div>
+        <div class="stage-wrap">
+          <div class="watch-ring">
+            <canvas id="editorCanvas" width="240" height="240"></canvas>
+          </div>
+          <div class="stage-hint">👆 Тяни любой элемент прямо пальцем или мышкой по кругу</div>
+        </div>
 
       <div class="tool-tabs">
         <button type="button" class="tool-tab active" onclick="openToolTab('bg', this)">🖼 Фон/Фото</button>
@@ -425,30 +660,54 @@
         </div>
       </div>
 
-      <button type="button" class="btn-send" id="sendBtn" onclick="sendPostcard()">
+      <button type="button" class="btn-send" id="sendBtn" onclick="sendPostcard(event)">
         🚀 Отправить открытку на 2-ю страницу
       </button>
       <div class="status" id="sendStatus"></div>
     </div>
 
-    <div class="card">
-      <strong style="color:#ffd4e4; font-size:13.5px;">🔔 Ответные сердечки со станции:</strong>
-      <p style="margin-top:4px; font-size:12px; color:var(--muted);">
-        Канал уведомлений для приложения <b>ntfy</b>: <code id="replyTopicLabel"></code>
-      </p>
-      <div id="repliesList">
-        <div class="reply-item" style="opacity:0.75;">Ожидаем нажатия Кнопки 1 на станции...</div>
+    <!-- ПРАВАЯ КОЛОНКА: ТЕКСТ НА 3-Ю СТРАНИЦУ + ОТВЕТЫ + НАСТРОЙКИ -->
+    <div class="side-col">
+      <div class="card">
+        <div class="card-head">
+          <span class="label-sm" style="margin:0; font-size:14px;">💬 Текстовое сообщение</span>
+          <span class="card-badge">Страница 3</span>
+        </div>
+        <textarea id="plainTextInput" maxlength="280" placeholder="Напиши текстовое сообщение — оно откроется отдельно на 3-й странице, не перекрывая открытку ❤️"></textarea>
+        <div class="row" style="margin-top:8px; margin-bottom:4px;">
+          <button type="button" class="btn-sm" onclick="setQuickPlainText('Доброе утро, солнышко! ☀️')">☀️ Доброе утро</button>
+          <button type="button" class="btn-sm" onclick="setQuickPlainText('Очень скучаю по тебе ❤️')">❤️ Скучаю</button>
+          <button type="button" class="btn-sm" onclick="setQuickPlainText('Спокойной ночи, обнимаю 🌙')">🌙 Спокойной ночи</button>
+        </div>
+        <button type="button" class="btn-send" id="sendPlainBtn" onclick="sendPlainTextMsg(event)">
+          ✉️ Отправить текст на 3-ю страницу
+        </button>
+        <div class="status" id="plainStatus"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="label-sm" style="margin:0; font-size:13.5px;">🔔 Ответные сердечки</span>
+          <span class="card-badge">Live</span>
+        </div>
+        <p style="font-size:12px; color:var(--muted);">
+          Канал уведомлений для приложения <b>ntfy</b>: <code id="replyTopicLabel" style="color:#ffd0e0;"></code>
+        </p>
+        <div id="repliesList">
+          <div class="reply-item" style="opacity:0.75;">Ожидаем нажатия Кнопки 1 на станции...</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <details>
+          <summary>⚙️ Настройка секретного канала ntfy.sh</summary>
+          <div style="margin-top:10px;">
+            <label class="label-sm" for="topicInput">Секретный ключ (совпадает с NTFY_TOPIC в прошивке):</label>
+            <input class="input" id="topicInput" type="text" value="love_station_xv_7d92a4c8e1" onchange="saveTopic()" style="font-family:monospace;">
+          </div>
+        </details>
       </div>
     </div>
-
-    <div class="card">
-      <details>
-        <summary>⚙️ Настройка секретного канала ntfy.sh</summary>
-        <div style="margin-top:10px;">
-          <label class="label-sm" for="topicInput">Секретный ключ (совпадает с NTFY_TOPIC в прошивке):</label>
-          <input class="input" id="topicInput" type="text" value="love_station_xv_7d92a4c8e1" onchange="saveTopic()" style="font-family:monospace;">
-        </div>
-      </details>
     </div>
   </div>
 
@@ -1130,7 +1389,50 @@
       return bgState.photoImg ? 'Фото-открытка ❤️' : 'Открытка для тебя ❤️';
     }
 
-    async function sendPlainTextMsg() {
+    document.addEventListener('pointermove', (e) => {
+      document.querySelectorAll('.card').forEach(c => {
+        const r = c.getBoundingClientRect();
+        const x = e.clientX - r.left;
+        const y = e.clientY - r.top;
+        c.style.setProperty('--mx', x + 'px');
+        c.style.setProperty('--my', y + 'px');
+        const near = x > -60 && y > -60 && x < r.width + 60 && y < r.height + 60;
+        c.style.setProperty('--glow-o', near ? '1' : '0');
+      });
+      if (e.target && e.target.closest) {
+        const b = e.target.closest('.btn-send');
+        if (b) {
+          const br = b.getBoundingClientRect();
+          b.style.setProperty('--bx', (e.clientX - br.left) + 'px');
+          b.style.setProperty('--by', (e.clientY - br.top) + 'px');
+        }
+      }
+    }, { passive: true });
+
+    function spawnClickSparks(ev) {
+      if (!ev || !ev.clientX) return;
+      for (let i = 0; i < 8; i++) {
+        const sp = document.createElement('span');
+        sp.className = 'spark';
+        const ang = (Math.PI * 2 * i) / 8 + (Math.random() - 0.5) * 0.3;
+        const dist = 22 + Math.random() * 20;
+        sp.style.left = ev.clientX + 'px';
+        sp.style.top = ev.clientY + 'px';
+        sp.style.setProperty('--tx', Math.cos(ang) * dist + 'px');
+        sp.style.setProperty('--ty', Math.sin(ang) * dist + 'px');
+        document.body.appendChild(sp);
+        setTimeout(() => sp.remove(), 500);
+      }
+    }
+
+    function setQuickPlainText(txt) {
+      const inp = document.getElementById('plainTextInput');
+      inp.value = txt;
+      inp.focus();
+    }
+
+    async function sendPlainTextMsg(ev) {
+      spawnClickSparks(ev);
       const inp = document.getElementById('plainTextInput');
       const btn = document.getElementById('sendPlainBtn');
       const statusBox = document.getElementById('plainStatus');
@@ -1171,7 +1473,8 @@
       }
     }
 
-    async function sendPostcard() {
+    async function sendPostcard(ev) {
+      spawnClickSparks(ev);
       const btn = document.getElementById('sendBtn');
       const statusBox = document.getElementById('sendStatus');
       statusBox.className = 'status';
