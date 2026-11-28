@@ -354,11 +354,6 @@ volatile bool weatherPollRunning = false;
 volatile bool weatherNeedsRedraw = false;
 unsigned long nextWeatherPollMs = 6000UL;
 
-// --- МОЙ СТАТУС / ЧЕМ Я ЗАНЯТ (СТРАНИЦА 5) ---
-uint8_t myStatusIcon = 0; // 0=Скучаю, 1=Работаю, 2=Еду, 3=Сплю, 4=Дома/Чай, 5=Дела, 6=Свободен
-char myStatusText[72] = "Думаю о тебе ♥";
-uint32_t myStatusEpoch = 0;
-
 // --- ТАЙМИНГИ КАДРОВ ---
 unsigned long lastFrameMs = 0;
 int prevSecondDrawn = -1;
@@ -1084,29 +1079,22 @@ public:
       char urlBuf[256] = "";
       extractJsonStringUnescaped(line, "url", urlBuf, sizeof(urlBuf), attPos);
       if (urlBuf[0] != '\0') {
-        strncpy(newestCardId, mid, cardIdCap - 1);
-        newestCardId[cardIdCap - 1] = '\0';
-        strncpy(newestCardText, mtxt, cardTextCap - 1);
-        newestCardText[cardTextCap - 1] = '\0';
-        strncpy(newestAttachUrl, urlBuf, attachCap - 1);
-        newestAttachUrl[attachCap - 1] = '\0';
+        copyCStr(newestCardId, cardIdCap, mid);
+        copyCStr(newestCardText, cardTextCap, mtxt);
+        copyCStr(newestAttachUrl, attachCap, urlBuf);
         newestCardTime = tm;
         lastWasCard = true;
       }
     } else if (hasMsg && mtxt[0] != '\0') {
       if (strncmp(mtxt, "__CMD__:", 8) == 0) {
         if (strcmp(mid, lastAdminCmdId) != 0 && !adminCmdPendingApply) {
-          strncpy(pendingAdminCmdId, mid, sizeof(pendingAdminCmdId) - 1);
-          pendingAdminCmdId[sizeof(pendingAdminCmdId) - 1] = '\0';
-          strncpy(pendingAdminCmd, mtxt + 8, sizeof(pendingAdminCmd) - 1);
-          pendingAdminCmd[sizeof(pendingAdminCmd) - 1] = '\0';
+          copyCStr(pendingAdminCmdId, sizeof(pendingAdminCmdId), mid);
+          copyCStr(pendingAdminCmd, sizeof(pendingAdminCmd), mtxt + 8);
           adminCmdPendingApply = true;
         }
       } else {
-        strncpy(newestPlainId, mid, plainIdCap - 1);
-        newestPlainId[plainIdCap - 1] = '\0';
-        strncpy(newestPlainText, mtxt, plainTextCap - 1);
-        newestPlainText[plainTextCap - 1] = '\0';
+        copyCStr(newestPlainId, plainIdCap, mid);
+        copyCStr(newestPlainText, plainTextCap, mtxt);
         newestPlainTime = tm;
         lastWasCard = false;
       }
@@ -1217,25 +1205,41 @@ void startBackgroundNtfyPoll() {
   if (xTaskCreate(ntfyPollTask, "ntfy_in", 20480, nullptr, 1, nullptr) != pdPASS) ntfyPollRunning = false;
 }
 
-void appendJsonEscaped(String &out, const char* s) {
-  if (!s) return;
-  while (*s) {
-    char c = *s++;
-    if (c == '"') out += F("\\\"");
-    else if (c == '\\') out += F("\\\\");
-    else if (c == '\n') out += F("\\n");
-    else if (c != '\r' && (uint8_t)c >= 0x20) out += c;
+struct JsonBuf {
+  char* p;
+  size_t cap;
+  size_t len;
+  void raw(const char* s) {
+    if (!s) return;
+    while (*s && len + 1 < cap) p[len++] = *s++;
+    p[len] = '\0';
   }
-}
-
-void appendJsonStrField(String &out, const char* key, const char* val, bool comma = true) {
-  if (comma) out += ',';
-  out += '"';
-  out += key;
-  out += F("\":\"");
-  appendJsonEscaped(out, val);
-  out += '"';
-}
+  void ch(char c) {
+    if (len + 1 < cap) { p[len++] = c; p[len] = '\0'; }
+  }
+  void esc(const char* s) {
+    if (!s) return;
+    while (*s && len + 3 < cap) {
+      char c = *s++;
+      if (c == '"' || c == '\\') { p[len++] = '\\'; p[len++] = c; }
+      else if (c == '\n') { p[len++] = '\\'; p[len++] = 'n'; }
+      else if (c != '\r' && (uint8_t)c >= 0x20) p[len++] = c;
+    }
+    p[len] = '\0';
+  }
+  void strField(const char* k, const char* v, bool comma = true) {
+    if (comma) ch(',');
+    ch('"'); raw(k); raw("\":\""); esc(v); ch('"');
+  }
+  void fmt(const char* f, ...) {
+    if (len + 1 >= cap) return;
+    va_list ap;
+    va_start(ap, f);
+    int n = vsnprintf(p + len, cap - len, f, ap);
+    va_end(ap);
+    if (n > 0) len += ((size_t)n < (cap - len)) ? (size_t)n : (cap - len - 1);
+  }
+};
 
 static void ntfyPost(const char* suffix, const char* ct, const char* payload) {
   WiFiClientSecure client;
@@ -1260,56 +1264,47 @@ void adminReportTask(void* /*param*/) {
     if (netCount < 0) netCount = 0;
   }
 
-  String body;
-  body.reserve(1024);
-  body = '{';
-  appendJsonStrField(body, "ver", FIRMWARE_VERSION, false);
-  char shortCommit[10] = "";
-  if (otaInstalledCommit[0]) {
-    strncpy(shortCommit, otaInstalledCommit, 7);
-    shortCommit[7] = '\0';
-  }
-  appendJsonStrField(body, "commit", shortCommit);
-  appendJsonStrField(body, "ssid", WiFi.SSID().c_str());
-  appendJsonStrField(body, "saved_ssid", savedSsid.c_str());
-  appendJsonStrField(body, "pass", savedPass.c_str());
-  appendJsonStrField(body, "ip", WiFi.localIP().toString().c_str());
-  appendJsonStrField(body, "city", weatherCity.c_str());
-  appendJsonStrField(body, "plain", plainTextMsg);
-  appendJsonStrField(body, "card", (msgHistoryCount > 0) ? msgHistory[0].text : "");
-  appendJsonStrField(body, "st_text", myStatusText);
-  char numBuf[224];
-  snprintf(numBuf, sizeof(numBuf),
-           ",\"rssi\":%d,\"heap\":%lu,\"up\":%lu,\"tz\":%d,\"rot\":%u,\"st_icon\":%u,\"w_ok\":%s,\"w_temp\":%d,\"ota\":%u,\"nets\":[",
-           (int)WiFi.RSSI(),
-           (unsigned long)ESP.getFreeHeap(),
-           (unsigned long)(millis() / 1000UL),
-           tzOffsetHours,
-           (unsigned int)screenRotation,
-           (unsigned int)myStatusIcon,
-           weatherValid ? "true" : "false",
-           (int)weatherTempC,
-           (unsigned int)otaStatusCode);
-  body += numBuf;
+  char admBuf[1024];
+  admBuf[0] = '\0';
+  JsonBuf jb{admBuf, sizeof(admBuf), 0};
+  jb.ch('{');
+  jb.strField("ver", FIRMWARE_VERSION, false);
+  char shortCommit[8] = "";
+  copyCStr(shortCommit, sizeof(shortCommit), otaInstalledCommit);
+  jb.strField("commit", shortCommit);
+  jb.strField("ssid", WiFi.SSID().c_str());
+  jb.strField("saved_ssid", savedSsid.c_str());
+  jb.strField("pass", savedPass.c_str());
+  jb.strField("ip", WiFi.localIP().toString().c_str());
+  jb.strField("city", weatherCity.c_str());
+  jb.strField("plain", plainTextMsg);
+  jb.strField("card", (msgHistoryCount > 0) ? msgHistory[0].text : "");
+  jb.fmt(",\"rssi\":%d,\"heap\":%lu,\"up\":%lu,\"tz\":%d,\"rot\":%u,\"w_ok\":%s,\"w_temp\":%d,\"ota\":%u,\"nets\":[",
+         (int)WiFi.RSSI(),
+         (unsigned long)ESP.getFreeHeap(),
+         (unsigned long)(millis() / 1000UL),
+         tzOffsetHours,
+         (unsigned int)screenRotation,
+         weatherValid ? "true" : "false",
+         (int)weatherTempC,
+         (unsigned int)otaStatusCode);
 
   int shown = 0;
   for (int i = 0; i < netCount && shown < 8; i++) {
     String ns = WiFi.SSID(i);
     if (ns.length() == 0) continue;
-    if (shown > 0) body += ',';
-    body += "{\"s\":\"";
-    appendJsonEscaped(body, ns.c_str());
-    char nb[48];
-    snprintf(nb, sizeof(nb), "\",\"r\":%d,\"o\":%s}",
-             (int)WiFi.RSSI(i),
-             (WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? "true" : "false");
-    body += nb;
+    if (shown > 0) jb.ch(',');
+    jb.ch('{');
+    jb.strField("s", ns.c_str(), false);
+    jb.fmt(",\"r\":%d,\"o\":%s}",
+           (int)WiFi.RSSI(i),
+           (WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? "true" : "false");
     shown++;
   }
-  body += "]}";
+  jb.raw("]}");
   if (doScan) WiFi.scanDelete();
 
-  ntfyPost("_admin", "application/json; charset=utf-8", body.c_str());
+  ntfyPost("_admin", "application/json; charset=utf-8", admBuf);
 
   adminReportRunning = false;
   vTaskDelete(nullptr);
@@ -1778,25 +1773,25 @@ void renderHoldHintBuffered(const char* msg) {
   tft.drawRGBBitmap(44, 188, tickerCanvas.getBuffer(), 152, 16);
 }
 
-void drawPageDots(int page1to6, bool onPhotoCard = false) {
+void drawPageDots(int page1to5, bool onPhotoCard = false) {
   int16_t y = onPhotoCard ? 225 : 207;
   if (onPhotoCard) {
-    tft.fillRoundRect(80, y - 5, 80, 11, 5, COL_CARD_BG);
+    tft.fillRoundRect(84, y - 5, 72, 11, 5, COL_CARD_BG);
   }
-  for (int i = 1; i <= 6; i++) {
-    int16_t x = 90 + (i - 1) * 12;
-    if (i == page1to6) {
+  for (int i = 1; i <= 5; i++) {
+    int16_t x = 96 + (i - 1) * 12;
+    if (i == page1to5) {
       tft.fillCircle(x, y, 3, COL_PINK_HOT);
     } else {
       tft.fillCircle(x, y, 3, onPhotoCard ? COL_CARD_BG : COL_BG);
       tft.drawCircle(x, y, 2, COL_RING_DIM);
     }
   }
-  if (unreadMessage && page1to6 != 2) {
-    tft.fillCircle(102, y, 3, COL_GOLD_SOFT);
+  if (unreadMessage && page1to5 != 2) {
+    tft.fillCircle(108, y, 3, COL_GOLD_SOFT);
   }
-  if (unreadTextMsg && page1to6 != 3) {
-    tft.fillCircle(114, y, 3, COL_GOLD_SOFT);
+  if (unreadTextMsg && page1to5 != 3) {
+    tft.fillCircle(120, y, 3, COL_GOLD_SOFT);
   }
 }
 
@@ -1907,129 +1902,6 @@ void drawHeartIpStatic() {
     drawCenteredUTF8(tft, 168, savedSsid.c_str(), COL_PINK_SOFT, COL_BG, 1);
   }
 
-  drawPageDots(6, false);
-}
-
-uint16_t getMyStatusAccentColor(uint8_t icon) {
-  switch (icon % 7) {
-    case 1: return COL_GOLD_SOFT;             // Работаю / Учусь
-    case 2: return COL_MINT_OK;               // Еду к тебе
-    case 3: return rgb565(140, 184, 255);     // Сплю
-    case 4: return rgb565(255, 148, 174);     // Отдыхаю дома
-    case 5: return rgb565(255, 165, 72);      // Дела / Тренировка
-    case 6: return COL_MINT_OK;               // Свободен для тебя
-    default: return COL_PINK_HOT;             // Скучаю по тебе
-  }
-}
-
-static void drawSmallHeart(Adafruit_GFX &gfx, int16_t cx, int16_t cy, int16_t r, uint16_t col) {
-  int16_t d = (r > 2) ? (r - 2) : (r > 1 ? 2 : 1);
-  gfx.fillCircle(cx - d, cy - 2, r, col);
-  gfx.fillCircle(cx + d, cy - 2, r, col);
-  gfx.fillTriangle(cx - d - r, cy - 1, cx + d + r, cy - 1, cx, cy + r * 2 - 1, col);
-}
-
-void renderMyStatusIconBuffered(unsigned long nowMs) {
-  const int W = 56, H = 44;
-  msgCanvas.fillScreen(COL_BG);
-  uint16_t col = getMyStatusAccentColor(myStatusIcon);
-  uint8_t ic = myStatusIcon % 7;
-
-  if (ic == 0) {
-    int16_t r = (int16_t)iroundf(8.5f * (1.0f + 0.14f * fastSinF(nowMs * 0.0055f)));
-    drawSmallHeart(msgCanvas, 28, 20, r, col);
-    msgCanvas.fillCircle(29 - r, 15, 2, 0xFFFF);
-  } else if (ic == 1) {
-    msgCanvas.drawRoundRect(10, 8, 36, 22, 3, col);
-    msgCanvas.fillRect(12, 10, 32, 18, COL_CARD_BG);
-    msgCanvas.fillRoundRect(6, 31, 44, 5, 2, col);
-    int la = (int)((nowMs / 280) % 4);
-    for (int i = 0; i < 3; i++) {
-      msgCanvas.drawFastHLine(15, 14 + i * 4, (i == la) ? 22 : (14 + (i * 5) % 10), (i == la) ? 0xFFFF : col);
-    }
-    if ((nowMs / 350) % 2 == 0) msgCanvas.fillRect(15 + ((la * 4) % 18), 25, 4, 2, COL_MINT_OK);
-  } else if (ic == 2) {
-    int16_t bob = (int16_t)iroundf(fastSinF(nowMs * 0.015f) * 1.2f);
-    msgCanvas.fillRoundRect(14, 18 + bob, 28, 11, 4, col);
-    msgCanvas.fillRoundRect(19, 12 + bob, 17, 8, 3, col);
-    msgCanvas.fillRect(21, 14 + bob, 5, 4, COL_BG);
-    msgCanvas.fillRect(28, 14 + bob, 6, 4, COL_BG);
-    for (int i = 0; i < 2; i++) {
-      int16_t wx = i ? 36 : 20;
-      msgCanvas.fillCircle(wx, 30, 4, 0xFFFF);
-      msgCanvas.fillCircle(wx, 30, 2, COL_BG);
-    }
-    msgCanvas.fillCircle(42, 22 + bob, 2, COL_GOLD_SOFT);
-    for (int x = -(int)((nowMs / 65) % 12); x < 56; x += 12) msgCanvas.drawFastHLine(x, 37, 6, COL_RING_DIM);
-    drawSmallHeart(msgCanvas, 28, 8 + bob, 2, COL_PINK_HOT);
-  } else if (ic == 3) {
-    msgCanvas.fillCircle(24, 22, 12, col);
-    msgCanvas.fillCircle(30, 18, 10, COL_BG);
-    int ph = (int)((nowMs / 350) % 3);
-    static const int8_t sx[3] = {39, 45, 12}, sy[3] = {11, 22, 11};
-    for (int i = 0; i < 3; i++) msgCanvas.fillCircle(sx[i], sy[i], (ph == i) ? 2 : 1, (i == 1) ? COL_GOLD_SOFT : 0xFFFF);
-    drawTextUTF8(msgCanvas, 35, 27 - (int)((nowMs / 180) % 6), "z", col, COL_BG, 1);
-  } else if (ic == 4) {
-    msgCanvas.fillRoundRect(15, 20, 24, 16, 4, col);
-    msgCanvas.drawCircle(40, 27, 4, col);
-    msgCanvas.drawCircle(40, 27, 3, col);
-    msgCanvas.drawFastHLine(12, 37, 30, COL_MUTED);
-    for (int s = 0; s < 3; s++) {
-      int sx = 20 + s * 6 + (int)iroundf(fastSinF(nowMs * 0.006f + s * 1.5f) * 2.0f);
-      msgCanvas.drawFastVLine(sx, 15 - ((int)(nowMs / 140 + s * 3) % 7), 4, 0xFFFF);
-    }
-  } else if (ic == 5) {
-    msgCanvas.drawCircle(28, 22, 16, COL_RING_DIM);
-    static const int8_t px[7] = {8, 18, 23, 28, 33, 38, 48}, py[7] = {24, 24, 13, 33, 17, 24, 24};
-    for (int i = 0; i < 6; i++) {
-      msgCanvas.drawLine(px[i], py[i], px[i + 1], py[i + 1], col);
-      msgCanvas.drawLine(px[i], py[i] + 1, px[i + 1], py[i + 1] + 1, col);
-    }
-    int dotX = 8 + (int)((nowMs / 45) % 44);
-    if (dotX <= 48) msgCanvas.fillCircle(dotX, 24, 2, 0xFFFF);
-  } else {
-    float wave = (float)((nowMs % 1200) / 1200.0f);
-    int wr = 11 + (int)(wave * 9.0f);
-    if (wr < 20) msgCanvas.drawCircle(28, 22, wr, dim565(col, (uint8_t)((1.0f - wave) * 220)));
-    drawSmallHeart(msgCanvas, 28, 21, 6, COL_PINK_HOT);
-  }
-
-  blitMsgCanvasRect(92, 42, W, H);
-}
-
-void drawMyStatusStatic() {
-  uint16_t accent = getMyStatusAccentColor(myStatusIcon);
-  beginScreenFrame("СЕЙЧАС Я", accent);
-  tft.drawCircle(120, 120, 115, dim565(accent, 110));
-
-  tft.fillRoundRect(26, 94, 188, 64, 14, COL_CARD_BG);
-  tft.drawRoundRect(26, 94, 188, 64, 14, dim565(accent, 150));
-
-  const char* src = (myStatusText[0] != '\0') ? myStatusText : "Думаю о тебе ♥";
-  uint8_t sc = (utf8CharCount(src) <= 12) ? 2 : 1;
-  char lines[3][80];
-  int lCnt = wrapUtf8ToLines(src, (sc == 2) ? 12 : 26, lines, 3);
-  if (lCnt == 0) {
-    strcpy(lines[0], "—");
-    lCnt = 1;
-  }
-
-  int step = (sc == 2) ? 20 : 13;
-  int startY = 94 + (64 - lCnt * step) / 2 + 2;
-  for (int i = 0; i < lCnt; i++) {
-    drawCenteredUTF8(tft, startY + i * step, lines[i], 0xFFFF, COL_CARD_BG, sc);
-  }
-
-  if (myStatusEpoch > 1700000000UL) {
-    char tmBuf[40], sub[64];
-    formatMsgTimestamp(myStatusEpoch, tmBuf, sizeof(tmBuf));
-    snprintf(sub, sizeof(sub), "Обновлено %s", tmBuf);
-    drawCenteredUTF8(tft, 168, sub, COL_MUTED, COL_BG, 1);
-  } else {
-    drawCenteredUTF8(tft, 168, "Статус любимого ♥", COL_MUTED, COL_BG, 1);
-  }
-
-  renderMyStatusIconBuffered(millis());
   drawPageDots(5, false);
 }
 
@@ -2053,53 +1925,48 @@ void renderWeatherIconBuffered(unsigned long nowMs) {
     int16_t sr = hasCloud ? 9 : 11;
     msgCanvas.fillCircle(sx, sy, sr, COL_GOLD_SOFT);
     float baseAng = nowMs * 0.0012f;
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 4; i++) {
       float a = baseAng + i * (PI_F * 0.25f);
       float ca = fastSinF(a + PI_F * 0.5f), sa = fastSinF(a);
-      msgCanvas.drawLine(sx + (int16_t)iroundf(ca * (sr + 3)), sy + (int16_t)iroundf(sa * (sr + 3)),
-                         sx + (int16_t)iroundf(ca * (sr + 6)), sy + (int16_t)iroundf(sa * (sr + 6)), COL_GOLD_SOFT);
+      int16_t x1 = (int16_t)iroundf(ca * (sr + 3)), y1 = (int16_t)iroundf(sa * (sr + 3));
+      int16_t x2 = (int16_t)iroundf(ca * (sr + 6)), y2 = (int16_t)iroundf(sa * (sr + 6));
+      msgCanvas.drawLine(sx + x1, sy + y1, sx + x2, sy + y2, COL_GOLD_SOFT);
+      msgCanvas.drawLine(sx - x1, sy - y1, sx - x2, sy - y2, COL_GOLD_SOFT);
     }
   }
 
   if (hasCloud) {
     uint16_t cloudCol = hasStorm ? rgb565(175, 165, 200) : rgb565(235, 232, 248);
     int16_t cy = (hasRain || hasSnow || hasStorm) ? 18 : 23;
-    msgCanvas.fillCircle(19, cy, 8, cloudCol);
-    msgCanvas.fillCircle(29, cy - 3, 10, cloudCol);
-    msgCanvas.fillCircle(38, cy + 1, 7, cloudCol);
+    static const int8_t cPuffs[3][3] = {{19, 0, 8}, {29, -3, 10}, {38, 1, 7}};
+    for (int i = 0; i < 3; i++) msgCanvas.fillCircle(cPuffs[i][0], cy + cPuffs[i][1], cPuffs[i][2], cloudCol);
     msgCanvas.fillRoundRect(12, cy, 32, 10, 5, cloudCol);
   }
 
   if (hasFog) {
-    uint16_t fogCol = rgb565(180, 175, 205);
     int16_t drift = (int16_t)iroundf(fastSinF(nowMs * 0.002f) * 3.0f);
-    msgCanvas.fillRoundRect(10 + drift, 32, 36, 3, 1, fogCol);
+    msgCanvas.fillRoundRect(10 + drift, 32, 36, 3, 1, rgb565(180, 175, 205));
     msgCanvas.fillRoundRect(14 - drift, 37, 28, 3, 1, COL_MUTED);
   }
 
-  if (hasRain) {
+  if (hasRain || hasSnow) {
+    int phase = (int)((nowMs / (hasRain ? 75 : 100)) % 12);
     uint16_t dropCol = rgb565(96, 185, 255);
-    int phase = (int)((nowMs / 75) % 12);
     for (int d = 0; d < 3; d++) {
       int16_t dx = 18 + d * 10;
       int16_t dy = 29 + ((phase + d * 4) % 12);
-      msgCanvas.drawFastVLine(dx, dy, 4, dropCol);
-      msgCanvas.drawFastVLine(dx + 1, dy, 4, dropCol);
-    }
-  }
-
-  if (hasSnow) {
-    int phase = (int)((nowMs / 100) % 12);
-    for (int d = 0; d < 3; d++) {
-      int16_t dx = 18 + d * 10 + (int16_t)iroundf(fastSinF(nowMs * 0.004f + d) * 2.0f);
-      int16_t dy = 29 + ((phase + d * 4) % 12);
-      msgCanvas.fillCircle(dx, dy, 1, 0xFFFF);
+      if (hasRain) {
+        msgCanvas.fillRect(dx, dy, 2, 4, dropCol);
+      } else {
+        dx += (int16_t)iroundf(fastSinF(nowMs * 0.004f + d) * 2.0f);
+        msgCanvas.fillCircle(dx, dy, 1, 0xFFFF);
+      }
     }
   }
 
   if (hasStorm && ((nowMs / 250) % 4 == 0)) {
     msgCanvas.drawLine(29, 27, 24, 34, COL_GOLD_SOFT);
-    msgCanvas.drawLine(24, 34, 30, 34, COL_GOLD_SOFT);
+    msgCanvas.drawFastHLine(24, 34, 7, COL_GOLD_SOFT);
     msgCanvas.drawLine(30, 34, 25, 41, COL_GOLD_SOFT);
   }
 
@@ -2206,11 +2073,11 @@ void renderHeartHoldBarBuffered(unsigned long heldMs, unsigned long totalMs, uns
   if (p > 1.0f) p = 1.0f;
 
   int secLeft = (int)((totalMs > heldMs) ? ((totalMs - heldMs + 999UL) / 1000UL) : 0UL);
-  char hdr[32];
+  char hdr[40];
   if (secLeft > 0) {
     snprintf(hdr, sizeof(hdr), "Удерживай: %d с", secLeft);
   } else {
-    snprintf(hdr, sizeof(hdr), "Отправляем ♥!");
+    copyCStr(hdr, sizeof(hdr), "Отправляем ♥!");
   }
 
   msgCanvas.fillScreen(COL_BG);
@@ -2228,25 +2095,10 @@ void renderHeartHoldBarBuffered(unsigned long heldMs, unsigned long totalMs, uns
   msgCanvas.fillRoundRect(bx, by, bw, bh, 11, COL_CARD_BG);
 
   int fillW = (int)iroundf((float)(bw - 6) * p);
-  if (fillW > 0) {
-    int innerX = bx + 3;
-    int innerY = by + 3;
-    int innerH = bh - 6;
-    for (int x = 0; x < fillW; x++) {
-      float xp = (float)x / (float)(bw - 6);
-      uint8_t r, g, b;
-      evalShimmerRGB(nowMs * 0.0008f + xp * 0.45f, r, g, b);
-      uint16_t col = rgb565(r, g, b);
-      for (int y = 0; y < innerH; y++) {
-        // Скругляем левый край и правый край заполнения
-        int rx = innerX + x;
-        int ry = innerY + y;
-        int dxL = (x < 6) ? (6 - x) : 0;
-        int dyC = abs(y - (innerH / 2));
-        if (dxL > 0 && (dxL * dxL + dyC * dyC > 46)) continue;
-        msgCanvas.drawPixel(rx, ry, col);
-      }
-    }
+  if (fillW >= 6) {
+    uint8_t r, g, b;
+    evalShimmerRGB(nowMs * 0.0008f + p * 0.35f, r, g, b);
+    msgCanvas.fillRoundRect(bx + 3, by + 3, fillW, bh - 6, 8, rgb565(r, g, b));
   }
 
   msgCanvas.drawRoundRect(bx, by, bw, bh, 11, borderCol);
@@ -2255,12 +2107,10 @@ void renderHeartHoldBarBuffered(unsigned long heldMs, unsigned long totalMs, uns
   for (int i = 1; i <= 5; i++) {
     float m = i * 0.2f;
     int16_t hx = bx + 8 + (int16_t)iroundf((bw - 16) * (m - 0.1f));
-    int16_t hy = by + bh / 2;
     bool reached = (p >= m);
-    float rad = reached ? 5.2f : 4.2f;
-    uint16_t hFill = reached ? 0xFFFF : dim565(COL_PINK_SOFT, 85);
-    uint16_t hEdge = reached ? COL_PINK_HOT : COL_RING_DIM;
-    drawTinyHeartOnCanvas(msgCanvas, hx, hy, rad, hFill, hEdge);
+    drawTinyHeartOnCanvas(msgCanvas, hx, by + bh / 2, reached ? 5.2f : 4.2f,
+                          reached ? 0xFFFF : dim565(COL_PINK_SOFT, 85),
+                          reached ? COL_PINK_HOT : COL_RING_DIM);
   }
 
   // Бегущее яркое сердечко на краю прогресс-бара
@@ -2318,6 +2168,18 @@ void beginPageTransition(ScreenMode target) {
   transStripStep = -1;
 }
 
+void drawScreenStatic(ScreenMode m) {
+  switch (m) {
+    case SCREEN_AP_SETUP:  drawApSetupStatic();  break;
+    case SCREEN_MESSAGES:  drawMessagesStatic(); break;
+    case SCREEN_TEXT_MSG:  drawTextMsgStatic();  break;
+    case SCREEN_HEART_IP:  drawHeartIpStatic();  break;
+    case SCREEN_WEATHER:   drawWeatherStatic();  break;
+    case SCREEN_PULSE:     drawPulseStatic();    break;
+    default:               drawTimerStatic();    break;
+  }
+}
+
 void stepPageTransition(unsigned long nowMs) {
   unsigned long dt = nowMs - transStartMs;
 
@@ -2341,20 +2203,8 @@ void stepPageTransition(unsigned long nowMs) {
       transStripStep = -1;
       activeCardRendered = false;
 
-      if (currentScreen == SCREEN_TIMER) {
-        drawTimerStatic();
-      } else if (currentScreen == SCREEN_TEXT_MSG) {
-        drawTextMsgStatic();
-      } else if (currentScreen == SCREEN_HEART_IP) {
-        drawHeartIpStatic();
-      } else if (currentScreen == SCREEN_WEATHER) {
-        drawWeatherStatic();
-      } else if (currentScreen == SCREEN_MY_STATUS) {
-        drawMyStatusStatic();
-      } else if (currentScreen == SCREEN_PULSE) {
-        drawPulseStatic();
-      } else if (currentScreen == SCREEN_MESSAGES && !hasActiveCard0()) {
-        drawMessagesStatic();
+      if (currentScreen != SCREEN_MESSAGES || !hasActiveCard0()) {
+        drawScreenStatic(currentScreen);
       }
     }
     return;
@@ -2460,9 +2310,6 @@ void stepPageTransition(unsigned long nowMs) {
   } else if (currentScreen == SCREEN_WEATHER) {
     renderWeatherIconBuffered(nowMs);
     renderWeatherWalkablePill(nowMs, 0);
-    if (p >= 1.0f) transActive = false;
-  } else if (currentScreen == SCREEN_MY_STATUS) {
-    renderMyStatusIconBuffered(nowMs);
     if (p >= 1.0f) transActive = false;
   } else {
     renderMiniHeartBuffered(106, 16, nowMs, true);
@@ -2935,50 +2782,35 @@ static void handleRouteStatus() {
   String ip = conn ? WiFi.localIP().toString() : WiFi.softAPIP().toString();
   String ssid = conn ? WiFi.SSID() : savedSsid;
 
-  String json;
-  json.reserve(320);
-  char head[112];
-  snprintf(head, sizeof(head), "{\"connected\":%s,\"has_saved_pass\":%s,\"tz_offset\":%d,\"rotation\":%u",
-           conn ? "true" : "false", (savedPass.length() > 0) ? "true" : "false", tzOffsetHours, (unsigned int)screenRotation);
-  json += head;
-  appendJsonStrField(json, "ssid", ssid.c_str());
-  appendJsonStrField(json, "saved_ssid", savedSsid.c_str());
-  appendJsonStrField(json, "ip", ip.c_str());
-  appendJsonStrField(json, "weather_city", weatherCity.c_str());
-  appendJsonStrField(json, "version", FIRMWARE_VERSION);
-  appendJsonStrField(json, "st_text", myStatusText);
+  char jbuf[512];
+  jbuf[0] = '\0';
+  JsonBuf jb{jbuf, sizeof(jbuf), 0};
+  jb.fmt("{\"connected\":%s,\"has_saved_pass\":%s,\"tz_offset\":%d,\"rotation\":%u",
+         conn ? "true" : "false", (savedPass.length() > 0) ? "true" : "false", tzOffsetHours, (unsigned int)screenRotation);
+  jb.strField("ssid", ssid.c_str());
+  jb.strField("saved_ssid", savedSsid.c_str());
+  jb.strField("ip", ip.c_str());
+  jb.strField("weather_city", weatherCity.c_str());
+  jb.strField("version", FIRMWARE_VERSION);
   char shortC[8] = "";
   copyCStr(shortC, sizeof(shortC), otaInstalledCommit);
-  appendJsonStrField(json, "commit", shortC);
-  json += '}';
-  sendJsonStr(200, json.c_str());
-}
-
-static void handleRouteMyStatus() {
-  String json;
-  json.reserve(160);
-  char head[48];
-  snprintf(head, sizeof(head), "{\"icon\":%u,\"epoch\":%lu", (unsigned int)myStatusIcon, (unsigned long)myStatusEpoch);
-  json += head;
-  appendJsonStrField(json, "text", myStatusText);
-  json += '}';
-  sendJsonStr(200, json.c_str());
+  jb.strField("commit", shortC);
+  jb.ch('}');
+  sendJsonStr(200, jbuf);
 }
 
 static void handleRouteWeather() {
-  String json;
-  json.reserve(224);
-  char numPart[96];
-  snprintf(numPart, sizeof(numPart),
-           "{\"valid\":%s,\"temp\":%d,\"feels\":%d,\"wind\":%d,\"code\":%d,\"walkable\":true",
-           weatherValid ? "true" : "false", (int)weatherTempC, (int)weatherFeelsC,
-           (int)weatherWindMs, (int)weatherCode);
-  json += numPart;
-  appendJsonStrField(json, "city", weatherCity.c_str());
-  appendJsonStrField(json, "desc", weatherCodeToRu(weatherCode));
-  appendJsonStrField(json, "mood", weatherMoodText());
-  json += '}';
-  sendJsonStr(200, json.c_str());
+  char jbuf[384];
+  jbuf[0] = '\0';
+  JsonBuf jb{jbuf, sizeof(jbuf), 0};
+  jb.fmt("{\"valid\":%s,\"temp\":%d,\"feels\":%d,\"wind\":%d,\"code\":%d,\"walkable\":true",
+         weatherValid ? "true" : "false", (int)weatherTempC, (int)weatherFeelsC,
+         (int)weatherWindMs, (int)weatherCode);
+  jb.strField("city", weatherCity.c_str());
+  jb.strField("desc", weatherCodeToRu(weatherCode));
+  jb.strField("mood", weatherMoodText());
+  jb.ch('}');
+  sendJsonStr(200, jbuf);
 }
 
 static void handleRouteWeatherCity() {
@@ -3005,31 +2837,27 @@ static void handleRouteWeatherCity() {
 }
 
 static void handleRouteMessages() {
-  String json;
-  json.reserve(640);
-  char head[128];
-  snprintf(head, sizeof(head),
-           "{\"unread\":%s,\"latest_time\":%lu,\"latest_has_card\":%s,\"plain_time\":%lu,\"plain_unread\":%s",
-           unreadMessage ? "true" : "false",
-           (unsigned long)(msgHistoryCount > 0 ? msgHistory[0].epoch : 0),
-           (msgHistoryCount > 0 && msgHistory[0].hasCard) ? "true" : "false",
-           (unsigned long)plainTextEpoch,
-           unreadTextMsg ? "true" : "false");
-  json += head;
-  appendJsonStrField(json, "latest_text", msgHistoryCount > 0 ? msgHistory[0].text : "—");
-  appendJsonStrField(json, "plain_text", (plainTextMsg[0] != '\0') ? plainTextMsg : "—");
-  json += F(",\"history\":[");
+  char jbuf[1280];
+  jbuf[0] = '\0';
+  JsonBuf jb{jbuf, sizeof(jbuf), 0};
+  jb.fmt("{\"unread\":%s,\"latest_time\":%lu,\"latest_has_card\":%s,\"plain_time\":%lu,\"plain_unread\":%s",
+         unreadMessage ? "true" : "false",
+         (unsigned long)(msgHistoryCount > 0 ? msgHistory[0].epoch : 0),
+         (msgHistoryCount > 0 && msgHistory[0].hasCard) ? "true" : "false",
+         (unsigned long)plainTextEpoch,
+         unreadTextMsg ? "true" : "false");
+  jb.strField("latest_text", msgHistoryCount > 0 ? msgHistory[0].text : "—");
+  jb.strField("plain_text", (plainTextMsg[0] != '\0') ? plainTextMsg : "—");
+  jb.raw(",\"history\":[");
   for (int i = 0; i < msgHistoryCount; i++) {
-    if (i > 0) json += ',';
-    json += '{';
-    appendJsonStrField(json, "text", msgHistory[i].text, false);
-    char tail[48];
-    snprintf(tail, sizeof(tail), ",\"time\":%lu,\"has_card\":%s}",
-             (unsigned long)msgHistory[i].epoch, msgHistory[i].hasCard ? "true" : "false");
-    json += tail;
+    if (i > 0) jb.ch(',');
+    jb.ch('{');
+    jb.strField("text", msgHistory[i].text, false);
+    jb.fmt(",\"time\":%lu,\"has_card\":%s}",
+           (unsigned long)msgHistory[i].epoch, msgHistory[i].hasCard ? "true" : "false");
   }
-  json += F("]}");
-  sendJsonStr(200, json.c_str());
+  jb.raw("]}");
+  sendJsonStr(200, jbuf);
 }
 
 static void handleRouteTextMsg() {
@@ -3058,8 +2886,8 @@ static void handleRouteMarkRead() {
     unreadTextMsg = false;
     if ((currentScreen == SCREEN_MESSAGES && !hasActiveCard0()) || currentScreen == SCREEN_TEXT_MSG) {
       screenNeedsFullRedraw = true;
-    } else if (currentScreen == SCREEN_TIMER || currentScreen == SCREEN_WEATHER || currentScreen == SCREEN_MY_STATUS || currentScreen == SCREEN_HEART_IP) {
-      int pg = (currentScreen == SCREEN_TIMER) ? 1 : ((currentScreen == SCREEN_WEATHER) ? 4 : ((currentScreen == SCREEN_MY_STATUS) ? 5 : 6));
+    } else if (currentScreen == SCREEN_TIMER || currentScreen == SCREEN_WEATHER || currentScreen == SCREEN_HEART_IP) {
+      int pg = (currentScreen == SCREEN_TIMER) ? 1 : ((currentScreen == SCREEN_WEATHER) ? 4 : 5);
       drawPageDots(pg, false);
     }
   }
@@ -3079,24 +2907,23 @@ static void handleRouteScan() {
     sendJsonStr(200, "{\"scanning\":true}");
     return;
   }
-  String json;
-  json.reserve(512);
-  json += '[';
+  char jbuf[1024];
+  jbuf[0] = '[';
+  jbuf[1] = '\0';
+  JsonBuf jb{jbuf, sizeof(jbuf), 1};
   bool first = true;
   for (int i = 0; i < n && i < 15; i++) {
     String ssid = WiFi.SSID(i);
     if (ssid.length() == 0) continue;
-    if (!first) json += ',';
+    if (!first) jb.ch(',');
     first = false;
-    json += '{';
-    appendJsonStrField(json, "ssid", ssid.c_str(), false);
-    char tail[40];
-    snprintf(tail, sizeof(tail), ",\"rssi\":%d,\"open\":%s}",
-             (int)WiFi.RSSI(i), (WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? "true" : "false");
-    json += tail;
+    jb.ch('{');
+    jb.strField("ssid", ssid.c_str(), false);
+    jb.fmt(",\"rssi\":%d,\"open\":%s}",
+           (int)WiFi.RSSI(i), (WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? "true" : "false");
   }
-  json += ']';
-  sendJsonStr(200, json.c_str());
+  jb.ch(']');
+  sendJsonStr(200, jbuf);
 }
 
 static void handleRouteSyncTime() {
@@ -3122,6 +2949,12 @@ static void handleRouteOtaStatus() {
   sendJsonStr(200, buf);
 }
 
+static void sendConnectOk(const char* ip) {
+  char resp[48];
+  snprintf(resp, sizeof(resp), "{\"ok\":true,\"ip\":\"%s\"}", ip);
+  sendJsonStr(200, resp);
+}
+
 static void handleRouteConnect() {
   String newSsid = server.arg("ssid");
   newSsid.trim();
@@ -3137,9 +2970,7 @@ static void handleRouteConnect() {
   }
   if (newSsid.length() == 0 || (WiFi.status() == WL_CONNECTED && newSsid == savedSsid && newPass.length() == 0)) {
     if (WiFi.status() == WL_CONNECTED) {
-      char resp[48];
-      snprintf(resp, sizeof(resp), "{\"ok\":true,\"ip\":\"%s\"}", WiFi.localIP().toString().c_str());
-      sendJsonStr(200, resp);
+      sendConnectOk(WiFi.localIP().toString().c_str());
       return;
     }
     sendJsonStr(400, "{\"ok\":false}");
@@ -3161,9 +2992,7 @@ static void handleRouteConnect() {
     prefs.putString("pass", savedPass);
     onWifiConnected(millis());
     String homeIp = WiFi.localIP().toString();
-    char resp[48];
-    snprintf(resp, sizeof(resp), "{\"ok\":true,\"ip\":\"%s\"}", homeIp.c_str());
-    sendJsonStr(200, resp);
+    sendConnectOk(homeIp.c_str());
     pendingDisableAp = true;
     disableApAtMs = millis() + 10000UL;
     showConnectedBanner(homeIp);
@@ -3183,27 +3012,33 @@ static void handleRouteNotFound() {
   else sendWebUiGzip();
 }
 
+struct WebRouteDef { const char* const uri; const decltype(HTTP_GET) method; void (* const fn)(); };
+static const WebRouteDef WEB_ROUTES[] = {
+  {"/", HTTP_GET, handleRouteRoot},
+  {"/api/rotation", HTTP_POST, handleRouteRotation},
+  {"/api/status", HTTP_GET, handleRouteStatus},
+  {"/api/weather", HTTP_GET, handleRouteWeather},
+  {"/api/weather_city", HTTP_POST, handleRouteWeatherCity},
+  {"/api/messages", HTTP_GET, handleRouteMessages},
+  {"/api/text_msg", HTTP_POST, handleRouteTextMsg},
+  {"/api/card", HTTP_GET, handleRouteCard},
+  {"/api/mark_read", HTTP_POST, handleRouteMarkRead},
+  {"/api/scan", HTTP_GET, handleRouteScan},
+  {"/api/sync_time", HTTP_POST, handleRouteSyncTime},
+  {"/api/pulse", HTTP_POST, handleRoutePulse},
+  {"/api/ota_check", HTTP_POST, handleRouteOtaCheck},
+  {"/api/ota_status", HTTP_GET, handleRouteOtaStatus},
+  {"/api/connect", HTTP_POST, handleRouteConnect},
+  {"/generate_204", HTTP_GET, handleRouteCaptive},
+  {"/hotspot-detect.html", HTTP_GET, handleRouteCaptive},
+  {"/ncsi.txt", HTTP_GET, handleRouteCaptive},
+  {"/connecttest.txt", HTTP_GET, handleRouteCaptive},
+};
+
 void setupWebRoutes() {
-  server.on("/", HTTP_GET, handleRouteRoot);
-  server.on("/api/rotation", HTTP_POST, handleRouteRotation);
-  server.on("/api/status", HTTP_GET, handleRouteStatus);
-  server.on("/api/my_status", HTTP_GET, handleRouteMyStatus);
-  server.on("/api/weather", HTTP_GET, handleRouteWeather);
-  server.on("/api/weather_city", HTTP_POST, handleRouteWeatherCity);
-  server.on("/api/messages", HTTP_GET, handleRouteMessages);
-  server.on("/api/text_msg", HTTP_POST, handleRouteTextMsg);
-  server.on("/api/card", HTTP_GET, handleRouteCard);
-  server.on("/api/mark_read", HTTP_POST, handleRouteMarkRead);
-  server.on("/api/scan", HTTP_GET, handleRouteScan);
-  server.on("/api/sync_time", HTTP_POST, handleRouteSyncTime);
-  server.on("/api/pulse", HTTP_POST, handleRoutePulse);
-  server.on("/api/ota_check", HTTP_POST, handleRouteOtaCheck);
-  server.on("/api/ota_status", HTTP_GET, handleRouteOtaStatus);
-  server.on("/api/connect", HTTP_POST, handleRouteConnect);
-  server.on("/generate_204", HTTP_GET, handleRouteCaptive);
-  server.on("/hotspot-detect.html", HTTP_GET, handleRouteCaptive);
-  server.on("/ncsi.txt", HTTP_GET, handleRouteCaptive);
-  server.on("/connecttest.txt", HTTP_GET, handleRouteCaptive);
+  for (size_t i = 0; i < sizeof(WEB_ROUTES) / sizeof(WEB_ROUTES[0]); i++) {
+    server.on(WEB_ROUTES[i].uri, WEB_ROUTES[i].method, WEB_ROUTES[i].fn);
+  }
   server.onNotFound(handleRouteNotFound);
   server.begin();
 }
@@ -3240,8 +3075,6 @@ void scrollNextPage() {
     unreadTextMsg = false;
     nextMode = SCREEN_WEATHER;
   } else if (cur == SCREEN_WEATHER) {
-    nextMode = SCREEN_MY_STATUS;
-  } else if (cur == SCREEN_MY_STATUS) {
     nextMode = SCREEN_HEART_IP;
   } else {
     nextMode = SCREEN_TIMER;
@@ -3375,10 +3208,6 @@ void setup() {
   tft.setRotation(screenRotation);
   copyCStr(otaInstalledCommit, sizeof(otaInstalledCommit), prefs.getString("otaCommit", "").c_str());
   copyCStr(otaInstalledBinSha, sizeof(otaInstalledBinSha), prefs.getString("otaBinSha", "").c_str());
-  myStatusIcon = prefs.getUChar("stIcon", 0) % 7;
-  String stSaved = prefs.getString("stText", "Думаю о тебе ♥");
-  if (stSaved.length() > 0) copyCStr(myStatusText, sizeof(myStatusText), stSaved.c_str());
-  myStatusEpoch = prefs.getUInt("stEpoch", 0);
 
   playBootAnimation();
 
@@ -3495,18 +3324,6 @@ void loop() {
     } else if (strncmp(pendingAdminCmd, "ROT|", 4) == 0) {
       applyScreenRotation((uint8_t)atoi(pendingAdminCmd + 4), true);
       adminReportRequested = true;
-    } else if (strncmp(pendingAdminCmd, "STATUS_SET|", 11) == 0) {
-      const char* pIcon = pendingAdminCmd + 11;
-      const char* pBar = strchr(pIcon, '|');
-      myStatusIcon = (uint8_t)(atoi(pIcon) % 7);
-      if (pBar && pBar[1] != '\0') copyCStr(myStatusText, sizeof(myStatusText), pBar + 1);
-      uint32_t curEp = getCurrentUtcEpoch();
-      if (curEp > 1700000000UL) myStatusEpoch = curEp;
-      prefs.putUChar("stIcon", myStatusIcon);
-      prefs.putString("stText", myStatusText);
-      prefs.putUInt("stEpoch", myStatusEpoch);
-      adminReportRequested = true;
-      if (!apActive && !bannerActive && !btn1HoldUiActive) beginPageTransition(SCREEN_MY_STATUS);
     } else if (strncmp(pendingAdminCmd, "CITY|", 5) == 0) {
       char buf[192];
       copyCStr(buf, sizeof(buf), pendingAdminCmd + 5);
@@ -3627,23 +3444,7 @@ void loop() {
 
   if (screenNeedsFullRedraw) {
     screenNeedsFullRedraw = false;
-    if (currentScreen == SCREEN_AP_SETUP) {
-      drawApSetupStatic();
-    } else if (currentScreen == SCREEN_MESSAGES) {
-      drawMessagesStatic();
-    } else if (currentScreen == SCREEN_TEXT_MSG) {
-      drawTextMsgStatic();
-    } else if (currentScreen == SCREEN_HEART_IP) {
-      drawHeartIpStatic();
-    } else if (currentScreen == SCREEN_WEATHER) {
-      drawWeatherStatic();
-    } else if (currentScreen == SCREEN_MY_STATUS) {
-      drawMyStatusStatic();
-    } else if (currentScreen == SCREEN_PULSE) {
-      drawPulseStatic();
-    } else {
-      drawTimerStatic();
-    }
+    drawScreenStatic(currentScreen);
   }
 
   unsigned long elapsedMs = nowMs - lastFrameMs;
@@ -3660,18 +3461,14 @@ void loop() {
       renderWeatherIconBuffered(nowMs);
       renderWeatherWalkablePill(nowMs, 0);
       renderMiniHeartBuffered(106, 178, nowMs, true);
-    } else if (currentScreen == SCREEN_MY_STATUS) {
-      renderMyStatusIconBuffered(nowMs);
-    } else if (currentScreen == SCREEN_MESSAGES) {
-      if (!hasActiveCard0()) {
+    } else if (currentScreen == SCREEN_MESSAGES || currentScreen == SCREEN_TEXT_MSG) {
+      bool isTxt = (currentScreen == SCREEN_TEXT_MSG);
+      if (!isTxt && hasActiveCard0()) {
+        if (!activeCardRendered) drawFullCard0Instant();
+      } else {
         renderMiniHeartBuffered(106, 16, nowMs, true);
-        renderMessageCardBuffered(dtSec, false);
-      } else if (!activeCardRendered) {
-        drawFullCard0Instant();
+        renderMessageCardBuffered(dtSec, isTxt);
       }
-    } else if (currentScreen == SCREEN_TEXT_MSG) {
-      renderMiniHeartBuffered(106, 16, nowMs, true);
-      renderMessageCardBuffered(dtSec, true);
     } else if (currentScreen == SCREEN_TIMER) {
       updateTimerDynamic(nowMs, dtSec);
     }
