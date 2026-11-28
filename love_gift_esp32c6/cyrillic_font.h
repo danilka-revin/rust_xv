@@ -74,7 +74,7 @@ static const uint8_t PROGMEM CYRILLIC_5X7[66][5] = {
 };
 
 // Общий компактный рендерер 5x7 глифа (экономит Flash)
-static inline void drawBitmap5x7(Adafruit_GFX &gfx, int16_t x, int16_t y, const uint8_t cols[5], bool fromProgmem, uint16_t color, uint16_t bg, uint8_t size) {
+static __attribute__((noinline)) void drawBitmap5x7(Adafruit_GFX &gfx, int16_t x, int16_t y, const uint8_t cols[5], bool fromProgmem, uint16_t color, uint16_t bg, uint8_t size) {
   gfx.startWrite();
   for (int8_t col = 0; col < 5; col++) {
     uint8_t line = fromProgmem ? pgm_read_byte(&cols[col]) : cols[col];

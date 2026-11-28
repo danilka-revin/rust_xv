@@ -12,7 +12,6 @@
 #include <LittleFS.h>
 #include <time.h>
 #include <sys/time.h>
-#include <math.h>
 #include "esp_timer.h"
 
 #include "app_types.h"
@@ -71,8 +70,57 @@ static inline uint16_t dim565(uint16_t c, uint8_t alpha) {
   return (uint16_t)((r << 11) | (g << 5) | b);
 }
 
+static constexpr float PI_F = 3.14159265f;
+static constexpr float DEG2RAD_F = 0.017453292f;
+
+static void copyCStr(char* dst, size_t cap, const char* src) {
+  if (!dst || cap == 0) return;
+  if (!src) { dst[0] = '\0'; return; }
+  strncpy(dst, src, cap - 1);
+  dst[cap - 1] = '\0';
+}
+
+static inline void makeIdxKey(char* out, const char* pfx3, int idx) {
+  memcpy(out, pfx3, 3);
+  out[3] = (char)('0' + idx);
+  out[4] = '\0';
+}
+
+static uint32_t isqrt32(uint32_t x) {
+  uint32_t res = 0, bit = 1UL << 30;
+  while (bit > x) bit >>= 2;
+  while (bit != 0) {
+    if (x >= res + bit) { x -= res + bit; res = (res >> 1) + bit; }
+    else res >>= 1;
+    bit >>= 2;
+  }
+  return res;
+}
+
 static inline int iroundf(float v) {
   return (v >= 0.0f) ? (int)(v + 0.5f) : (int)(v - 0.5f);
+}
+
+static const int16_t PROGMEM SIN_Q15[17] = {
+  0, 3212, 6393, 9512, 12540, 15447, 18205, 20788, 23170,
+  25330, 27246, 28899, 30274, 31357, 32138, 32610, 32767
+};
+
+static float fastSinF(float x) {
+  float q = x * 0.63661977f;
+  int32_t iq = (q >= 0.0f) ? (int32_t)q : ((int32_t)q - 1);
+  float frac = q - (float)iq;
+  int quad = (int)(iq & 3);
+  bool neg = (quad >= 2);
+  if (quad & 1) frac = 1.0f - frac;
+  float fidx = frac * 16.0f;
+  int idx = (int)fidx;
+  if (idx >= 16) return neg ? -1.0f : 1.0f;
+  float rem = fidx - (float)idx;
+  float v0 = (float)(int16_t)pgm_read_word(&SIN_Q15[idx]);
+  float v1 = (float)(int16_t)pgm_read_word(&SIN_Q15[idx + 1]);
+  float res = (v0 + (v1 - v0) * rem) * (1.0f / 32767.0f);
+  return neg ? -res : res;
 }
 
 static inline void evalShimmerRGB(float phase, uint8_t &outR, uint8_t &outG, uint8_t &outB) {
@@ -89,7 +137,7 @@ static inline void evalShimmerRGB(float phase, uint8_t &outR, uint8_t &outG, uin
   int idx0 = ((int)scaled) % 5;
   int idx1 = (idx0 + 1) % 5;
   float frac = scaled - (float)(int)scaled;
-  float t = 0.5f - 0.5f * cosf(frac * PI);
+  float t = frac * frac * (3.0f - 2.0f * frac);
 
   outR = (uint8_t)(PALETTE[idx0][0] + (PALETTE[idx1][0] - PALETTE[idx0][0]) * t);
   outG = (uint8_t)(PALETTE[idx0][1] + (PALETTE[idx1][1] - PALETTE[idx0][1]) * t);
@@ -597,9 +645,8 @@ bool hasActiveCard0() {
 
 void saveLastNtfyId(const char* msgId) {
   if (msgId && msgId[0] != '\0') {
-    strncpy(lastNtfyId, msgId, sizeof(lastNtfyId) - 1);
-    lastNtfyId[sizeof(lastNtfyId) - 1] = '\0';
-    prefs.putString("lastMsgId", String(lastNtfyId));
+    copyCStr(lastNtfyId, sizeof(lastNtfyId), msgId);
+    prefs.putString("lastMsgId", lastNtfyId);
   }
 }
 
@@ -608,33 +655,23 @@ void loadSavedMessages() {
   if (msgHistoryCount < 0) msgHistoryCount = 0;
   if (msgHistoryCount > MAX_MSG_HISTORY) msgHistoryCount = MAX_MSG_HISTORY;
 
-  String lid = prefs.getString("lastMsgId", "");
-  strncpy(lastNtfyId, lid.c_str(), sizeof(lastNtfyId) - 1);
-  lastNtfyId[sizeof(lastNtfyId) - 1] = '\0';
-
-  String lcid = prefs.getString("lastCmdId", "");
-  strncpy(lastAdminCmdId, lcid.c_str(), sizeof(lastAdminCmdId) - 1);
-  lastAdminCmdId[sizeof(lastAdminCmdId) - 1] = '\0';
-
-  String tm = prefs.getString("tmsg", "");
-  strncpy(plainTextMsg, tm.c_str(), sizeof(plainTextMsg) - 1);
-  plainTextMsg[sizeof(plainTextMsg) - 1] = '\0';
+  copyCStr(lastNtfyId, sizeof(lastNtfyId), prefs.getString("lastMsgId", "").c_str());
+  copyCStr(lastAdminCmdId, sizeof(lastAdminCmdId), prefs.getString("lastCmdId", "").c_str());
+  copyCStr(plainTextMsg, sizeof(plainTextMsg), prefs.getString("tmsg", "").c_str());
   plainTextEpoch = prefs.getUInt("tmtm", 0);
 
   for (int i = 0; i < msgHistoryCount; i++) {
-    char kTxt[12], kTm[12], kCrd[12];
-    snprintf(kTxt, sizeof(kTxt), "msg%d", i);
-    snprintf(kTm,  sizeof(kTm),  "mtm%d", i);
-    snprintf(kCrd, sizeof(kCrd), "mcr%d", i);
-    String s = prefs.getString(kTxt, "");
-    strncpy(msgHistory[i].text, s.c_str(), sizeof(msgHistory[i].text) - 1);
-    msgHistory[i].text[sizeof(msgHistory[i].text) - 1] = '\0';
+    char kTxt[8], kTm[8], kCrd[8];
+    makeIdxKey(kTxt, "msg", i);
+    makeIdxKey(kTm,  "mtm", i);
+    makeIdxKey(kCrd, "mcr", i);
+    copyCStr(msgHistory[i].text, sizeof(msgHistory[i].text), prefs.getString(kTxt, "").c_str());
     msgHistory[i].epoch = prefs.getUInt(kTm, 0);
     msgHistory[i].hasCard = (prefs.getInt(kCrd, 0) == 1);
 
     if (msgHistory[i].hasCard && fsReady) {
-      char path[16];
-      snprintf(path, sizeof(path), "/card%d.lvc", i);
+      char path[12];
+      lvcCardPath(path, i);
       if (!LittleFS.exists(path)) msgHistory[i].hasCard = false;
     }
   }
@@ -644,11 +681,10 @@ void loadSavedMessages() {
 
 void savePlainTextMessage(const char* text, uint32_t epoch, const char* msgId) {
   if (!text || text[0] == '\0') return;
-  strncpy(plainTextMsg, text, sizeof(plainTextMsg) - 1);
-  plainTextMsg[sizeof(plainTextMsg) - 1] = '\0';
+  copyCStr(plainTextMsg, sizeof(plainTextMsg), text);
   plainTextEpoch = (epoch > 1700000000UL) ? epoch : getCurrentUtcEpoch();
 
-  prefs.putString("tmsg", String(plainTextMsg));
+  prefs.putString("tmsg", plainTextMsg);
   prefs.putUInt("tmtm", plainTextEpoch);
   saveLastNtfyId(msgId);
 
@@ -675,12 +711,8 @@ void pushNewMessageToHistory(const char* text, uint32_t epoch, const char* msgId
     msgHistory[i] = msgHistory[i - 1];
   }
 
-  if (text && text[0] != '\0') {
-    strncpy(msgHistory[0].text, text, sizeof(msgHistory[0].text) - 1);
-    msgHistory[0].text[sizeof(msgHistory[0].text) - 1] = '\0';
-  } else {
-    strncpy(msgHistory[0].text, "Открытка для тебя ❤", sizeof(msgHistory[0].text) - 1);
-  }
+  copyCStr(msgHistory[0].text, sizeof(msgHistory[0].text),
+           (text && text[0] != '\0') ? text : "Открытка для тебя ❤");
   msgHistory[0].epoch = (epoch > 1700000000UL) ? epoch : getCurrentUtcEpoch();
   msgHistory[0].hasCard = withPendingCard;
 
@@ -689,8 +721,8 @@ void pushNewMessageToHistory(const char* text, uint32_t epoch, const char* msgId
   if (fsReady) {
     for (int i = 0; i < msgHistoryCount; i++) {
       if (msgHistory[i].hasCard) {
-        char path[16];
-        snprintf(path, sizeof(path), "/card%d.lvc", i);
+        char path[12];
+        lvcCardPath(path, i);
         if (!LittleFS.exists(path)) msgHistory[i].hasCard = false;
       }
     }
@@ -700,11 +732,11 @@ void pushNewMessageToHistory(const char* text, uint32_t epoch, const char* msgId
 
   prefs.putInt("msgCount", msgHistoryCount);
   for (int i = 0; i < msgHistoryCount; i++) {
-    char kTxt[12], kTm[12], kCrd[12];
-    snprintf(kTxt, sizeof(kTxt), "msg%d", i);
-    snprintf(kTm,  sizeof(kTm),  "mtm%d", i);
-    snprintf(kCrd, sizeof(kCrd), "mcr%d", i);
-    prefs.putString(kTxt, String(msgHistory[i].text));
+    char kTxt[8], kTm[8], kCrd[8];
+    makeIdxKey(kTxt, "msg", i);
+    makeIdxKey(kTm,  "mtm", i);
+    makeIdxKey(kCrd, "mcr", i);
+    prefs.putString(kTxt, msgHistory[i].text);
     prefs.putUInt(kTm, msgHistory[i].epoch);
     prefs.putInt(kCrd, msgHistory[i].hasCard ? 1 : 0);
   }
@@ -881,6 +913,8 @@ public:
   }
 };
 
+static char netWorkBuf[2048];
+
 // Скачивает файл открытки .lvc потоково прямо в LittleFS (/pending.lvc) с проверкой целостности!
 bool downloadLvcAttachmentToFlash(const char* url, char* outCaption, size_t outCapSize) {
   if (!fsReady || !url || url[0] == '\0') return false;
@@ -903,7 +937,8 @@ bool downloadLvcAttachmentToFlash(const char* url, char* outCaption, size_t outC
       bool writeErr = false;
 
       if (totalLen > 0) {
-        static uint8_t dlBuf[1024];
+        uint8_t* dlBuf = (uint8_t*)(netWorkBuf + 1024);
+        const size_t dlBufSize = 1024;
         WiFiClient* stream = https.getStreamPtr();
         unsigned long lastDataMs = millis();
 
@@ -912,7 +947,7 @@ bool downloadLvcAttachmentToFlash(const char* url, char* outCaption, size_t outC
           if (avail > 0) {
             size_t rem = (size_t)totalLen - totalWritten;
             size_t toRead = avail;
-            if (toRead > sizeof(dlBuf)) toRead = sizeof(dlBuf);
+            if (toRead > dlBufSize) toRead = dlBufSize;
             if (toRead > rem) toRead = rem;
 
             int rd = stream->readBytes(dlBuf, toRead);
@@ -960,22 +995,25 @@ bool downloadLvcAttachmentToFlash(const char* url, char* outCaption, size_t outC
   return ok;
 }
 
-class BoundedStringPrint : public Stream {
+class BoundedBufPrint : public Stream {
 public:
-  String &out;
+  char *out;
+  size_t len = 0;
   size_t maxBytes;
-  BoundedStringPrint(String &s, size_t maxB) : out(s), maxBytes(maxB) {}
+  BoundedBufPrint(char *buf, size_t bufCap) : out(buf), maxBytes(bufCap ? bufCap - 1 : 0) {
+    if (out && bufCap) out[0] = '\0';
+  }
   int available() override { return 0; }
   int read() override { return -1; }
   int peek() override { return -1; }
   size_t write(uint8_t b) override { return write(&b, 1); }
   size_t write(const uint8_t *buf, size_t size) override {
-    if (out.length() < maxBytes) {
-      size_t space = maxBytes - out.length();
+    if (out && len < maxBytes) {
+      size_t space = maxBytes - len;
       size_t take = (size < space) ? size : space;
-      for (size_t i = 0; i < take; i++) {
-        out += (char)buf[i];
-      }
+      memcpy(out + len, buf, take);
+      len += take;
+      out[len] = '\0';
     }
     return size;
   }
@@ -1093,7 +1131,8 @@ public:
 };
 
 void ntfyPollTask(void* /*param*/) {
-  static char lineBuf[2048];
+  char* lineBuf = netWorkBuf;
+  const size_t lineBufCap = 2048;
   static char newestCardText[320];
   static char newestCardId[32];
   static char newestAttachUrl[256];
@@ -1119,7 +1158,7 @@ void ntfyPollTask(void* /*param*/) {
     if (beginHttpsClient(client, https, url, 5, 4500, 6000)) {
       httpCode = https.GET();
       if (httpCode == HTTP_CODE_OK) {
-        NtfyLineStream parser(lineBuf, sizeof(lineBuf),
+        NtfyLineStream parser(lineBuf, lineBufCap,
                               newestCardId, sizeof(newestCardId),
                               newestCardText, sizeof(newestCardText),
                               newestAttachUrl, sizeof(newestAttachUrl),
@@ -1198,6 +1237,18 @@ void appendJsonStrField(String &out, const char* key, const char* val, bool comm
   out += '"';
 }
 
+static void ntfyPost(const char* suffix, const char* ct, const char* payload) {
+  WiFiClientSecure client;
+  HTTPClient https;
+  char url[96];
+  snprintf(url, sizeof(url), "https://ntfy.sh/%s%s", NTFY_TOPIC, suffix);
+  if (beginHttpsClient(client, https, url, 5, 5000, 6000, false)) {
+    https.addHeader("Content-Type", ct);
+    https.POST(payload);
+    https.end();
+  }
+}
+
 void adminReportTask(void* /*param*/) {
   bool doScan = adminScanNetworks;
   adminScanNetworks = false;
@@ -1258,15 +1309,7 @@ void adminReportTask(void* /*param*/) {
   body += "]}";
   if (doScan) WiFi.scanDelete();
 
-  WiFiClientSecure client;
-  HTTPClient https;
-  char url[96];
-  snprintf(url, sizeof(url), "https://ntfy.sh/%s_admin", NTFY_TOPIC);
-  if (beginHttpsClient(client, https, url, 5, 5000, 6000, false)) {
-    https.addHeader("Content-Type", "application/json; charset=utf-8");
-    https.POST(body);
-    https.end();
-  }
+  ntfyPost("_admin", "application/json; charset=utf-8", body.c_str());
 
   adminReportRunning = false;
   vTaskDelete(nullptr);
@@ -1282,16 +1325,7 @@ void startBackgroundAdminReport() {
 }
 
 void ntfyReplyTask(void* /*param*/) {
-  WiFiClientSecure client;
-  HTTPClient https;
-  char url[96];
-  snprintf(url, sizeof(url), "https://ntfy.sh/%s_reply", NTFY_TOPIC);
-
-  if (beginHttpsClient(client, https, url, 5, 4500, 5000, false)) {
-    https.addHeader("Content-Type", "text/plain; charset=utf-8");
-    https.POST("Она нажала кнопку на станции и прислала тебе сердечко!");
-    https.end();
-  }
+  ntfyPost("_reply", "text/plain; charset=utf-8", "Она нажала кнопку на станции и прислала тебе сердечко!");
 
   ntfyReplyRunning = false;
   vTaskDelete(nullptr);
@@ -1340,17 +1374,15 @@ void weatherPollTask(void* /*param*/) {
   if (beginHttpsClient(client, https, urlBuf, 5, 4500, 5000)) {
     int code = https.GET();
     if (code == HTTP_CODE_OK) {
-      String body;
-      BoundedStringPrint bp(body, 4096);
+      BoundedBufPrint bp(netWorkBuf, sizeof(netWorkBuf));
       https.writeToStream(&bp);
-      const char* rawBody = body.c_str();
-      int curPos = findJsonKeyColon(rawBody, "current");
+      int curPos = findJsonKeyColon(netWorkBuf, "current");
       if (curPos >= 0) {
         float t = 0.0f, app = 0.0f, wcode = 0.0f, wind = 0.0f;
-        if (extractJsonFloatField(rawBody, "temperature_2m", t, curPos)) {
-          extractJsonFloatField(rawBody, "apparent_temperature", app, curPos);
-          extractJsonFloatField(rawBody, "weather_code", wcode, curPos);
-          extractJsonFloatField(rawBody, "wind_speed_10m", wind, curPos);
+        if (extractJsonFloatField(netWorkBuf, "temperature_2m", t, curPos)) {
+          extractJsonFloatField(netWorkBuf, "apparent_temperature", app, curPos);
+          extractJsonFloatField(netWorkBuf, "weather_code", wcode, curPos);
+          extractJsonFloatField(netWorkBuf, "wind_speed_10m", wind, curPos);
           weatherTempC  = (int)iroundf(t);
           weatherFeelsC = (int)iroundf(app);
           weatherCode   = (int)iroundf(wcode);
@@ -1380,9 +1412,11 @@ void startBackgroundWeatherPoll() {
 float getHeartbeatScale(unsigned long ms) {
   float phase = (ms % 1400) / 1400.0f;
   if (phase < 0.12f) {
-    return 0.92f + 0.15f * sinf((phase / 0.12f) * PI);
+    float u = phase * (1.0f / 0.12f);
+    return 0.92f + 0.60f * u * (1.0f - u);
   } else if (phase >= 0.18f && phase < 0.32f) {
-    return 0.92f + 0.09f * sinf(((phase - 0.18f) / 0.14f) * PI);
+    float u = (phase - 0.18f) * (1.0f / 0.14f);
+    return 0.92f + 0.36f * u * (1.0f - u);
   }
   return 0.92f;
 }
@@ -1436,7 +1470,7 @@ void renderBigHeartFrame(int16_t x0, int16_t y0, unsigned long ms, bool shimmerM
   }
 
   if (extraScale > 0.75f) {
-    float twinkle = 0.5f + 0.5f * sinf(ms * 0.006f);
+    float twinkle = 0.5f + 0.5f * fastSinF(ms * 0.006f);
     if (twinkle > 0.48f) {
       uint16_t spCol = (twinkle > 0.78f) ? 0xFFFF : COL_PINK_SOFT;
       heartCanvas.drawFastHLine(10, 18, 5, spCol);
@@ -1497,9 +1531,9 @@ void renderOrbitHeartBuffered(float exactSecond0to60, unsigned long nowMs) {
   const int S = 18;
   const float R_ORBIT = 110.0f;
 
-  float angleRad = (exactSecond0to60 * 6.0f - 90.0f) * DEG_TO_RAD;
-  float fx = 120.0f + cosf(angleRad) * R_ORBIT;
-  float fy = 120.0f + sinf(angleRad) * R_ORBIT;
+  float angleRad = (exactSecond0to60 * 6.0f - 90.0f) * DEG2RAD_F;
+  float fx = 120.0f + fastSinF(angleRad + PI_F * 0.5f) * R_ORBIT;
+  float fy = 120.0f + fastSinF(angleRad) * R_ORBIT;
 
   int16_t bx = (int16_t)iroundf(fx) - (S / 2);
   int16_t by = (int16_t)iroundf(fy) - (S / 2);
@@ -1513,7 +1547,7 @@ void renderOrbitHeartBuffered(float exactSecond0to60, unsigned long nowMs) {
   float cxLocal = fx - (float)bx;
   float cyLocal = fy - (float)by;
 
-  float pulse = 1.0f + 0.06f * sinf(nowMs * 0.007f);
+  float pulse = 1.0f + 0.06f * fastSinF(nowMs * 0.007f);
   float invRadius = 1.0f / (5.1f * pulse);
   float basePhase = nowMs * 0.00032f;
 
@@ -1567,6 +1601,22 @@ void renderOrbitHeartBuffered(float exactSecond0to60, unsigned long nowMs) {
   tft.drawRGBBitmap(bx, by, buf, S, S);
 }
 
+static void blitMsgCanvasRect(int16_t x, int16_t y, int16_t w, int16_t h) {
+  uint16_t* src = msgCanvas.getBuffer();
+  int stride = msgCanvas.width();
+  for (int r = 1; r < h; r++) {
+    memmove(src + r * w, src + r * stride, (size_t)w * sizeof(uint16_t));
+  }
+  tft.drawRGBBitmap(x, y, src, w, h);
+}
+
+static void beginScreenFrame(const char* title = nullptr, uint16_t titleCol = COL_PINK_SOFT) {
+  tft.fillScreen(COL_BG);
+  tft.drawCircle(120, 120, 118, COL_RING_DIM);
+  tft.drawCircle(120, 120, 117, COL_RING_DIM);
+  if (title) drawCenteredUTF8(tft, 20, title, titleCol, COL_BG, 1);
+}
+
 void renderDaysBlockBuffered(uint64_t days, int16_t xSlideOffset = 0) {
   const int W = 168;
   const int H = 56;
@@ -1603,27 +1653,15 @@ void renderDaysBlockBuffered(uint64_t days, int16_t xSlideOffset = 0) {
   int16_t dx = (W - dw) / 2 + xSlideOffset;
   drawTextUTF8(msgCanvas, dx, 39, dWord, COL_PINK_HOT, COL_BG, 2);
 
-  uint16_t* src = msgCanvas.getBuffer();
-  int stride = msgCanvas.width();
-  for (int y = 1; y < H; y++) {
-    memmove(src + y * W, src + y * stride, (size_t)W * sizeof(uint16_t));
-  }
-  tft.drawRGBBitmap(36, 67, src, W, H);
+  blitMsgCanvasRect(36, 67, W, H);
 }
 
 void renderTimePillBuffered(const char* text, uint16_t textColor, int16_t xSlideOffset = 0) {
   pillCanvas.fillScreen(COL_BG);
-  if (xSlideOffset == 0) {
-    pillCanvas.fillRoundRect(0, 0, 168, 30, 12, COL_CARD_BG);
-    pillCanvas.drawRoundRect(0, 0, 168, 30, 12, COL_RING_DIM);
-    drawCenteredUTF8(pillCanvas, 7, text, textColor, COL_CARD_BG, 2);
-  } else {
-    int16_t rx = xSlideOffset;
-    pillCanvas.fillRoundRect(rx, 0, 168, 30, 12, COL_CARD_BG);
-    pillCanvas.drawRoundRect(rx, 0, 168, 30, 12, COL_RING_DIM);
-    int16_t tw = (int16_t)(utf8CharCount(text) * 12);
-    drawTextUTF8(pillCanvas, rx + (168 - tw) / 2, 7, text, textColor, COL_CARD_BG, 2);
-  }
+  pillCanvas.fillRoundRect(xSlideOffset, 0, 168, 30, 12, COL_CARD_BG);
+  pillCanvas.drawRoundRect(xSlideOffset, 0, 168, 30, 12, COL_RING_DIM);
+  int16_t tw = (int16_t)(utf8CharCount(text) * 12);
+  drawTextUTF8(pillCanvas, xSlideOffset + (170 - tw) / 2, 7, text, textColor, COL_CARD_BG, 2);
   tft.drawRGBBitmap(36, 129, pillCanvas.getBuffer(), 168, 30);
 }
 
@@ -1785,11 +1823,6 @@ void drawFullCard0Instant() {
 // СТАТИЧЕСКИЕ КАРКАСЫ ЭКРАНОВ И ПЛАВНЫЕ ПЕРЕХОДЫ
 // ============================================================================
 
-void drawDecorativeRings() {
-  tft.drawCircle(120, 120, 118, COL_RING_DIM);
-  tft.drawCircle(120, 120, 117, COL_RING_DIM);
-}
-
 void playBootAnimation() {
   tft.fillScreen(COL_BG);
   for (int r = 8; r <= 116; r += 8) {
@@ -1801,17 +1834,14 @@ void playBootAnimation() {
 }
 
 void drawApSetupStatic() {
-  tft.fillScreen(COL_BG);
-  drawDecorativeRings();
-  drawCenteredUTF8(tft, 20, "СТАНЦИЯ ОТНОШЕНИЙ", COL_PINK_SOFT, COL_BG, 1);
+  beginScreenFrame("СТАНЦИЯ ОТНОШЕНИЙ");
   drawCenteredUTF8(tft, 145, "Подключи Wi-Fi:", COL_MUTED, COL_BG, 1);
   drawCenteredUTF8(tft, 160, AP_SSID, COL_MINT_OK, COL_BG, 2);
   drawCenteredUTF8(tft, 184, "Сайт: 192.168.4.1", COL_GOLD_SOFT, COL_BG, 1);
 }
 
 void drawTimerStatic() {
-  tft.fillScreen(COL_BG);
-  drawDecorativeRings();
+  beginScreenFrame();
   drawCenteredUTF8(tft, 47, "МЫ ВМЕСТЕ", COL_PINK_SOFT, COL_BG, 2);
   drawPageDots(1, false);
 
@@ -1823,8 +1853,7 @@ void drawTimerStatic() {
 }
 
 void drawTextCardStatic(const char* hdr, uint16_t hdrCol, uint32_t epoch, int pageNum) {
-  tft.fillScreen(COL_BG);
-  drawDecorativeRings();
+  beginScreenFrame();
   drawCenteredUTF8(tft, 45, hdr, hdrCol, COL_BG, 1);
 
   if (epoch > 0) {
@@ -1858,9 +1887,7 @@ void drawTextMsgStatic() {
 }
 
 void drawHeartIpStatic() {
-  tft.fillScreen(COL_BG);
-  drawDecorativeRings();
-  drawCenteredUTF8(tft, 20, "СТАНЦИЯ ОТНОШЕНИЙ", COL_PINK_SOFT, COL_BG, 1);
+  beginScreenFrame("СТАНЦИЯ ОТНОШЕНИЙ");
 
   if (wifiConnected) {
     drawCenteredUTF8(tft, 143, "Адрес страницы:", COL_MUTED, COL_BG, 1);
@@ -1895,166 +1922,107 @@ uint16_t getMyStatusAccentColor(uint8_t icon) {
   }
 }
 
+static void drawSmallHeart(Adafruit_GFX &gfx, int16_t cx, int16_t cy, int16_t r, uint16_t col) {
+  int16_t d = (r > 2) ? (r - 2) : (r > 1 ? 2 : 1);
+  gfx.fillCircle(cx - d, cy - 2, r, col);
+  gfx.fillCircle(cx + d, cy - 2, r, col);
+  gfx.fillTriangle(cx - d - r, cy - 1, cx + d + r, cy - 1, cx, cy + r * 2 - 1, col);
+}
+
 void renderMyStatusIconBuffered(unsigned long nowMs) {
-  const int W = 56;
-  const int H = 44;
+  const int W = 56, H = 44;
   msgCanvas.fillScreen(COL_BG);
   uint16_t col = getMyStatusAccentColor(myStatusIcon);
   uint8_t ic = myStatusIcon % 7;
 
   if (ic == 0) {
-    // Пульсирующее сердце + сияние
-    float sc = 1.0f + 0.14f * sinf(nowMs * 0.0055f);
-    int16_t r = (int16_t)iroundf(8.5f * sc);
-    int16_t cx = 28, cy = 20;
-    msgCanvas.fillCircle(cx - r + 2, cy - 3, r, col);
-    msgCanvas.fillCircle(cx + r - 2, cy - 3, r, col);
-    msgCanvas.fillTriangle(cx - 2 * r + 2, cy - 1, cx + 2 * r - 2, cy - 1, cx, cy + 2 * r - 1, col);
-    msgCanvas.fillCircle(cx - r + 1, cy - 5, 2, 0xFFFF);
+    int16_t r = (int16_t)iroundf(8.5f * (1.0f + 0.14f * fastSinF(nowMs * 0.0055f)));
+    drawSmallHeart(msgCanvas, 28, 20, r, col);
+    msgCanvas.fillCircle(29 - r, 15, 2, 0xFFFF);
   } else if (ic == 1) {
-    // Ноутбук с анимированным кодом
     msgCanvas.drawRoundRect(10, 8, 36, 22, 3, col);
     msgCanvas.fillRect(12, 10, 32, 18, COL_CARD_BG);
     msgCanvas.fillRoundRect(6, 31, 44, 5, 2, col);
-    int lineAnim = (int)((nowMs / 280) % 4);
+    int la = (int)((nowMs / 280) % 4);
     for (int i = 0; i < 3; i++) {
-      int w = (i == lineAnim) ? 22 : (14 + ((i * 5) % 10));
-      msgCanvas.drawFastHLine(15, 14 + i * 4, w, (i == lineAnim) ? 0xFFFF : col);
+      msgCanvas.drawFastHLine(15, 14 + i * 4, (i == la) ? 22 : (14 + (i * 5) % 10), (i == la) ? 0xFFFF : col);
     }
-    if ((nowMs / 350) % 2 == 0) msgCanvas.fillRect(15 + ((lineAnim * 4) % 18), 25, 4, 2, COL_MINT_OK);
+    if ((nowMs / 350) % 2 == 0) msgCanvas.fillRect(15 + ((la * 4) % 18), 25, 4, 2, COL_MINT_OK);
   } else if (ic == 2) {
-    // Машинка "Еду к тебе" + бегущая дорога + сердечко сверху
-    int16_t bob = (int16_t)iroundf(sinf(nowMs * 0.015f) * 1.2f);
+    int16_t bob = (int16_t)iroundf(fastSinF(nowMs * 0.015f) * 1.2f);
     msgCanvas.fillRoundRect(14, 18 + bob, 28, 11, 4, col);
     msgCanvas.fillRoundRect(19, 12 + bob, 17, 8, 3, col);
     msgCanvas.fillRect(21, 14 + bob, 5, 4, COL_BG);
     msgCanvas.fillRect(28, 14 + bob, 6, 4, COL_BG);
-    msgCanvas.fillCircle(20, 30, 4, 0xFFFF); msgCanvas.fillCircle(20, 30, 2, COL_BG);
-    msgCanvas.fillCircle(36, 30, 4, 0xFFFF); msgCanvas.fillCircle(36, 30, 2, COL_BG);
-    msgCanvas.fillCircle(42, 22 + bob, 2, COL_GOLD_SOFT);
-    int roadPhase = (int)((nowMs / 65) % 12);
-    for (int x = -roadPhase; x < 56; x += 12) {
-      msgCanvas.drawFastHLine(x, 37, 6, COL_RING_DIM);
+    for (int i = 0; i < 2; i++) {
+      int16_t wx = i ? 36 : 20;
+      msgCanvas.fillCircle(wx, 30, 4, 0xFFFF);
+      msgCanvas.fillCircle(wx, 30, 2, COL_BG);
     }
-    msgCanvas.fillCircle(26, 6 + bob, 2, COL_PINK_HOT);
-    msgCanvas.fillCircle(30, 6 + bob, 2, COL_PINK_HOT);
-    msgCanvas.fillTriangle(24, 7 + bob, 32, 7 + bob, 28, 11 + bob, COL_PINK_HOT);
+    msgCanvas.fillCircle(42, 22 + bob, 2, COL_GOLD_SOFT);
+    for (int x = -(int)((nowMs / 65) % 12); x < 56; x += 12) msgCanvas.drawFastHLine(x, 37, 6, COL_RING_DIM);
+    drawSmallHeart(msgCanvas, 28, 8 + bob, 2, COL_PINK_HOT);
   } else if (ic == 3) {
-    // Полумесяц + звёздочки "Сплю"
     msgCanvas.fillCircle(24, 22, 12, col);
     msgCanvas.fillCircle(30, 18, 10, COL_BG);
-    int phase = (int)((nowMs / 350) % 3);
-    msgCanvas.fillCircle(39, 11, (phase == 0) ? 2 : 1, 0xFFFF);
-    msgCanvas.fillCircle(45, 22, (phase == 1) ? 2 : 1, COL_GOLD_SOFT);
-    msgCanvas.fillCircle(12, 11, (phase == 2) ? 2 : 1, 0xFFFF);
-    int zOff = (int)((nowMs / 180) % 6);
-    drawTextUTF8(msgCanvas, 35, 27 - zOff, "z", col, COL_BG, 1);
+    int ph = (int)((nowMs / 350) % 3);
+    static const int8_t sx[3] = {39, 45, 12}, sy[3] = {11, 22, 11};
+    for (int i = 0; i < 3; i++) msgCanvas.fillCircle(sx[i], sy[i], (ph == i) ? 2 : 1, (i == 1) ? COL_GOLD_SOFT : 0xFFFF);
+    drawTextUTF8(msgCanvas, 35, 27 - (int)((nowMs / 180) % 6), "z", col, COL_BG, 1);
   } else if (ic == 4) {
-    // Чашка чая с паром "Отдыхаю дома"
     msgCanvas.fillRoundRect(15, 20, 24, 16, 4, col);
     msgCanvas.drawCircle(40, 27, 4, col);
     msgCanvas.drawCircle(40, 27, 3, col);
     msgCanvas.drawFastHLine(12, 37, 30, COL_MUTED);
     for (int s = 0; s < 3; s++) {
-      int sx = 20 + s * 6 + (int)iroundf(sinf(nowMs * 0.006f + s * 1.5f) * 2.0f);
-      int sy = 15 - ((int)(nowMs / 140 + s * 3) % 7);
-      msgCanvas.drawFastVLine(sx, sy, 4, 0xFFFF);
+      int sx = 20 + s * 6 + (int)iroundf(fastSinF(nowMs * 0.006f + s * 1.5f) * 2.0f);
+      msgCanvas.drawFastVLine(sx, 15 - ((int)(nowMs / 140 + s * 3) % 7), 4, 0xFFFF);
     }
   } else if (ic == 5) {
-    // Линия пульса / энергии "Дела / Спорт"
     msgCanvas.drawCircle(28, 22, 16, COL_RING_DIM);
-    int sweep = (int)((nowMs / 45) % 44);
-    int16_t px[7] = { 8, 18, 23, 28, 33, 38, 48 };
-    int16_t py[7] = { 24, 24, 13, 33, 17, 24, 24 };
+    static const int8_t px[7] = {8, 18, 23, 28, 33, 38, 48}, py[7] = {24, 24, 13, 33, 17, 24, 24};
     for (int i = 0; i < 6; i++) {
       msgCanvas.drawLine(px[i], py[i], px[i + 1], py[i + 1], col);
       msgCanvas.drawLine(px[i], py[i] + 1, px[i + 1], py[i + 1] + 1, col);
     }
-    int dotX = 8 + sweep;
+    int dotX = 8 + (int)((nowMs / 45) % 44);
     if (dotX <= 48) msgCanvas.fillCircle(dotX, 24, 2, 0xFFFF);
   } else {
-    // Свободен для тебя: сердце + волны
     float wave = (float)((nowMs % 1200) / 1200.0f);
     int wr = 11 + (int)(wave * 9.0f);
     if (wr < 20) msgCanvas.drawCircle(28, 22, wr, dim565(col, (uint8_t)((1.0f - wave) * 220)));
-    int16_t cx = 28, cy = 21;
-    msgCanvas.fillCircle(cx - 5, cy - 2, 6, COL_PINK_HOT);
-    msgCanvas.fillCircle(cx + 5, cy - 2, 6, COL_PINK_HOT);
-    msgCanvas.fillTriangle(cx - 11, cy, cx + 11, cy, cx, cy + 12, COL_PINK_HOT);
+    drawSmallHeart(msgCanvas, 28, 21, 6, COL_PINK_HOT);
   }
 
-  uint16_t* src = msgCanvas.getBuffer();
-  int stride = msgCanvas.width();
-  for (int y = 1; y < H; y++) {
-    memmove(src + y * W, src + y * stride, (size_t)W * sizeof(uint16_t));
-  }
-  tft.drawRGBBitmap(92, 42, src, W, H);
+  blitMsgCanvasRect(92, 42, W, H);
 }
 
 void drawMyStatusStatic() {
-  tft.fillScreen(COL_BG);
-  drawDecorativeRings();
   uint16_t accent = getMyStatusAccentColor(myStatusIcon);
+  beginScreenFrame("СЕЙЧАС Я", accent);
   tft.drawCircle(120, 120, 115, dim565(accent, 110));
 
-  drawCenteredUTF8(tft, 20, "СЕЙЧАС Я", accent, COL_BG, 1);
-
-  // Карточка текста статуса по центру
   tft.fillRoundRect(26, 94, 188, 64, 14, COL_CARD_BG);
   tft.drawRoundRect(26, 94, 188, 64, 14, dim565(accent, 150));
 
   const char* src = (myStatusText[0] != '\0') ? myStatusText : "Думаю о тебе ♥";
-  int totalChars = (int)utf8CharCount(src);
-  uint8_t sc = (totalChars <= 12) ? 2 : 1;
-  int maxCharsLine = (sc == 2) ? 12 : 26;
-
-  char lines[3][76];
-  int lCnt = 0;
-  const char* p = src;
-  while (*p && lCnt < 3) {
-    while (*p == ' ') p++;
-    if (!*p) break;
-    const char* lineStart = p;
-    const char* lastSpace = nullptr;
-    int chars = 0;
-    while (*p) {
-      const char* nextP = p;
-      uint8_t lead = (uint8_t)*nextP;
-      if (lead < 0x80) nextP += 1;
-      else if ((lead & 0xE0) == 0xC0 && nextP[1]) nextP += 2;
-      else if ((lead & 0xF0) == 0xE0 && nextP[1] && nextP[2]) nextP += 3;
-      else if ((lead & 0xF8) == 0xF0 && nextP[1] && nextP[2] && nextP[3]) nextP += 4;
-      else nextP += 1;
-      chars++;
-      if (*p == ' ') lastSpace = p;
-      if (chars > maxCharsLine) {
-        if (lastSpace && lastSpace > lineStart) p = lastSpace;
-        break;
-      }
-      p = nextP;
-    }
-    size_t len = (size_t)(p - lineStart);
-    if (len >= sizeof(lines[0])) len = sizeof(lines[0]) - 1;
-    memcpy(lines[lCnt], lineStart, len);
-    lines[lCnt][len] = '\0';
-    lCnt++;
-  }
+  uint8_t sc = (utf8CharCount(src) <= 12) ? 2 : 1;
+  char lines[3][80];
+  int lCnt = wrapUtf8ToLines(src, (sc == 2) ? 12 : 26, lines, 3);
   if (lCnt == 0) {
     strcpy(lines[0], "—");
     lCnt = 1;
   }
 
   int step = (sc == 2) ? 20 : 13;
-  int totalH = lCnt * step;
-  int startY = 94 + (64 - totalH) / 2 + 2;
+  int startY = 94 + (64 - lCnt * step) / 2 + 2;
   for (int i = 0; i < lCnt; i++) {
     drawCenteredUTF8(tft, startY + i * step, lines[i], 0xFFFF, COL_CARD_BG, sc);
   }
 
   if (myStatusEpoch > 1700000000UL) {
-    char tmBuf[40];
+    char tmBuf[40], sub[64];
     formatMsgTimestamp(myStatusEpoch, tmBuf, sizeof(tmBuf));
-    char sub[64];
     snprintf(sub, sizeof(sub), "Обновлено %s", tmBuf);
     drawCenteredUTF8(tft, 168, sub, COL_MUTED, COL_BG, 1);
   } else {
@@ -2086,12 +2054,10 @@ void renderWeatherIconBuffered(unsigned long nowMs) {
     msgCanvas.fillCircle(sx, sy, sr, COL_GOLD_SOFT);
     float baseAng = nowMs * 0.0012f;
     for (int i = 0; i < 8; i++) {
-      float a = baseAng + i * (PI / 4.0f);
-      int16_t rx1 = sx + (int16_t)iroundf(cosf(a) * (sr + 3));
-      int16_t ry1 = sy + (int16_t)iroundf(sinf(a) * (sr + 3));
-      int16_t rx2 = sx + (int16_t)iroundf(cosf(a) * (sr + 6));
-      int16_t ry2 = sy + (int16_t)iroundf(sinf(a) * (sr + 6));
-      msgCanvas.drawLine(rx1, ry1, rx2, ry2, COL_GOLD_SOFT);
+      float a = baseAng + i * (PI_F * 0.25f);
+      float ca = fastSinF(a + PI_F * 0.5f), sa = fastSinF(a);
+      msgCanvas.drawLine(sx + (int16_t)iroundf(ca * (sr + 3)), sy + (int16_t)iroundf(sa * (sr + 3)),
+                         sx + (int16_t)iroundf(ca * (sr + 6)), sy + (int16_t)iroundf(sa * (sr + 6)), COL_GOLD_SOFT);
     }
   }
 
@@ -2106,7 +2072,7 @@ void renderWeatherIconBuffered(unsigned long nowMs) {
 
   if (hasFog) {
     uint16_t fogCol = rgb565(180, 175, 205);
-    int16_t drift = (int16_t)iroundf(sinf(nowMs * 0.002f) * 3.0f);
+    int16_t drift = (int16_t)iroundf(fastSinF(nowMs * 0.002f) * 3.0f);
     msgCanvas.fillRoundRect(10 + drift, 32, 36, 3, 1, fogCol);
     msgCanvas.fillRoundRect(14 - drift, 37, 28, 3, 1, COL_MUTED);
   }
@@ -2125,7 +2091,7 @@ void renderWeatherIconBuffered(unsigned long nowMs) {
   if (hasSnow) {
     int phase = (int)((nowMs / 100) % 12);
     for (int d = 0; d < 3; d++) {
-      int16_t dx = 18 + d * 10 + (int16_t)iroundf(sinf(nowMs * 0.004f + d) * 2.0f);
+      int16_t dx = 18 + d * 10 + (int16_t)iroundf(fastSinF(nowMs * 0.004f + d) * 2.0f);
       int16_t dy = 29 + ((phase + d * 4) % 12);
       msgCanvas.fillCircle(dx, dy, 1, 0xFFFF);
     }
@@ -2137,12 +2103,7 @@ void renderWeatherIconBuffered(unsigned long nowMs) {
     msgCanvas.drawLine(30, 34, 25, 41, COL_GOLD_SOFT);
   }
 
-  uint16_t* src = msgCanvas.getBuffer();
-  int stride = msgCanvas.width();
-  for (int y = 1; y < H; y++) {
-    memmove(src + y * W, src + y * stride, (size_t)W * sizeof(uint16_t));
-  }
-  tft.drawRGBBitmap(92, 34, src, W, H);
+  blitMsgCanvasRect(92, 34, W, H);
 }
 
 const char* weatherMoodText() {
@@ -2167,8 +2128,7 @@ void renderWeatherWalkablePill(unsigned long nowMs, int16_t yOffset = 0) {
 }
 
 void drawWeatherStatic() {
-  tft.fillScreen(COL_BG);
-  drawDecorativeRings();
+  beginScreenFrame();
 
   char titleBuf[48];
   snprintf(titleBuf, sizeof(titleBuf), "ПОГОДА • %s", weatherCity.c_str());
@@ -2201,9 +2161,7 @@ void drawPulsePhraseBuffered() {
 }
 
 void drawPulseStatic() {
-  tft.fillScreen(COL_BG);
-  drawDecorativeRings();
-  drawCenteredUTF8(tft, 20, "СТАНЦИЯ ОТНОШЕНИЙ", COL_PINK_SOFT, COL_BG, 1);
+  beginScreenFrame("СТАНЦИЯ ОТНОШЕНИЙ");
   drawPulsePhraseBuffered();
   if (pulseSentReply) {
     drawCenteredUTF8(tft, 182, "Ответное ♥ отправлено!", COL_MINT_OK, COL_BG, 1);
@@ -2236,9 +2194,7 @@ void drawTinyHeartOnCanvas(GFXcanvas16 &cv, int16_t cx, int16_t cy, float radius
 }
 
 void drawHeartHoldStatic() {
-  tft.fillScreen(COL_BG);
-  drawDecorativeRings();
-  drawCenteredUTF8(tft, 22, "ОТПРАВИТЬ СЕРДЕЧКО?", COL_PINK_SOFT, COL_BG, 1);
+  beginScreenFrame("ОТПРАВИТЬ СЕРДЕЧКО?");
   drawCenteredUTF8(tft, 194, "Отпусти — отмена", COL_MUTED, COL_BG, 1);
 }
 
@@ -2334,8 +2290,8 @@ void drawIrisClosingRing(int rOuter, int rInner, unsigned long nowMs) {
     int dy2 = dy * dy;
     if (dy2 > rOuter2) continue;
 
-    int xOut = (int)sqrtf((float)(rOuter2 - dy2));
-    int xIn  = (dy2 < rInner2) ? (int)sqrtf((float)(rInner2 - dy2)) : 0;
+    int xOut = (int)isqrt32((uint32_t)(rOuter2 - dy2));
+    int xIn  = (dy2 < rInner2) ? (int)isqrt32((uint32_t)(rInner2 - dy2)) : 0;
 
     if (xOut >= xIn) {
       tft.writeFastHLine(120 - xOut, y, xOut - xIn + 1, COL_BG);
@@ -2343,7 +2299,7 @@ void drawIrisClosingRing(int rOuter, int rInner, unsigned long nowMs) {
     }
 
     if (rInner > 3 && dy2 < rInner2) {
-      int xH = (dy2 < rHalo2) ? (int)sqrtf((float)(rHalo2 - dy2)) : 0;
+      int xH = (dy2 < rHalo2) ? (int)isqrt32((uint32_t)(rHalo2 - dy2)) : 0;
       if (xIn > xH) {
         tft.writeFastHLine(120 - xIn, y, xIn - xH + 1, haloCol);
         tft.writeFastHLine(120 + xH,  y, xIn - xH + 1, haloCol);
@@ -2492,7 +2448,7 @@ void stepPageTransition(unsigned long nowMs) {
   } else if (currentScreen == SCREEN_HEART_IP || currentScreen == SCREEN_PULSE) {
     // Пружинистое появление 3D-сердечка (0.22 -> 1.13 -> 1.0)
     float elastic = (p < 0.72f)
-      ? (0.22f + 0.91f * sinf((p / 0.72f) * (PI * 0.5f)))
+      ? (0.22f + 0.91f * fastSinF((p / 0.72f) * (PI_F * 0.5f)))
       : (1.13f - 0.13f * ((p - 0.72f) / 0.28f));
     bool shimmer = (currentScreen == SCREEN_PULSE);
     int16_t hy = (currentScreen == SCREEN_PULSE) ? 34 : 36;
@@ -2549,12 +2505,7 @@ void updateTimerDynamic(unsigned long nowMs, float dtSec) {
       msgCanvas.fillScreen(COL_BG);
       drawCenteredUTF8(msgCanvas, 12, "Синхронизация", COL_GOLD_SOFT, COL_BG, 2, 168);
       drawCenteredUTF8(msgCanvas, 36, "точного времени...", COL_MUTED, COL_BG, 1, 168);
-      uint16_t* src = msgCanvas.getBuffer();
-      int stride = msgCanvas.width();
-      for (int y = 1; y < 56; y++) {
-        memmove(src + y * 168, src + y * stride, 168 * sizeof(uint16_t));
-      }
-      tft.drawRGBBitmap(36, 67, src, 168, 56);
+      blitMsgCanvasRect(36, 67, 168, 56);
       renderTimePillBuffered("-- : -- : --", COL_PINK_SOFT);
       snprintf(tickerText, sizeof(tickerText), "ПОДКЛЮЧАЕМСЯ К СЕРВЕРУ ТОЧНОГО ВРЕМЕНИ  •  ");
       tickerLoopPx = (int)utf8CharCount(tickerText) * 6;
@@ -2604,8 +2555,7 @@ void updateTimerDynamic(unsigned long nowMs, float dtSec) {
 }
 
 void showConnectedBanner(const String& ip) {
-  tft.fillScreen(COL_BG);
-  drawDecorativeRings();
+  beginScreenFrame();
   renderBigHeartFrame(64, 30, millis());
   drawCenteredUTF8(tft, 140, "ПАРОЛЬ СОХРАНЁН!", COL_MINT_OK, COL_BG, 1);
   drawCenteredUTF8(tft, 158, ip.c_str(), COL_GOLD_SOFT, COL_BG, 2);
@@ -2619,43 +2569,19 @@ void showConnectedBanner(const String& ip) {
 // АВТООБНОВЛЕНИЕ С GITHUB ПО ПОСЛЕДНЕМУ КОММИТУ ВЕТКИ MAIN (HTTPS OTA)
 // ============================================================================
 
-uint32_t civilToEpochUtc(int y, int m, int d, int hh, int mm, int ss) {
-  y -= (m <= 2) ? 1 : 0;
-  int era = (y >= 0 ? y : y - 399) / 400;
-  int yoe = y - era * 400;
-  int doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
-  int doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-  long days = (long)era * 146097L + (long)doe - 719468L;
-  if (days < 0) return 0;
-  return (uint32_t)days * 86400UL + (uint32_t)hh * 3600UL + (uint32_t)mm * 60UL + (uint32_t)ss;
+uint32_t parseDayStamp(int y, int m, int d) {
+  if (y < 2024 || m < 1 || m > 12 || d < 1 || d > 31) return 0;
+  return (uint32_t)(y - 2024) * 372UL + (uint32_t)m * 31UL + (uint32_t)d;
 }
 
-uint32_t parseCompileEpoch() {
-  const char* dt = __DATE__; // "Mmm DD YYYY"
-  const char* tm = __TIME__; // "HH:MM:SS"
+uint32_t parseCompileDayStamp() {
+  const char* dt = __DATE__;
   static const char* months = "JanFebMarAprMayJunJulAugSepOctNovDec";
   int m = 1;
   for (int i = 0; i < 12; i++) {
     if (strncmp(dt, months + i * 3, 3) == 0) { m = i + 1; break; }
   }
-  int d = atoi(dt + 4);
-  int y = atoi(dt + 7);
-  int hh = atoi(tm);
-  int mm = atoi(tm + 3);
-  int ss = atoi(tm + 6);
-  return civilToEpochUtc(y, m, d, hh, mm, ss);
-}
-
-uint32_t parseIsoUtcEpoch(const char* iso) {
-  if (!iso || strlen(iso) < 19) return 0;
-  int y  = atoi(iso);
-  int m  = atoi(iso + 5);
-  int d  = atoi(iso + 8);
-  int hh = atoi(iso + 11);
-  int mm = atoi(iso + 14);
-  int ss = atoi(iso + 17);
-  if (y < 2024 || m < 1 || m > 12 || d < 1 || d > 31) return 0;
-  return civilToEpochUtc(y, m, d, hh, mm, ss);
+  return parseDayStamp(atoi(dt + 7), m, atoi(dt + 4));
 }
 
 bool isHex40(const char* s) {
@@ -2668,20 +2594,17 @@ bool isHex40(const char* s) {
   return s[40] == '\0';
 }
 
-bool githubApiGet(const char* url, const char* acceptHdr, String& outPayload, size_t maxBytes, int& outCode) {
+bool githubApiGet(const char* url, const char* acceptHdr, char* outBuf, size_t outCap) {
   WiFiClientSecure client;
   HTTPClient https;
-  outCode = 0;
   if (!beginHttpsClient(client, https, url, 5, 5000, 6000)) return false;
   https.addHeader("User-Agent", "LoveStation-ESP32C6");
   if (acceptHdr && acceptHdr[0]) https.addHeader("Accept", acceptHdr);
-  outCode = https.GET();
-  bool ok = false;
-  if (outCode == HTTP_CODE_OK) {
-    outPayload = "";
-    BoundedStringPrint bp(outPayload, maxBytes);
+  int code = https.GET();
+  bool ok = (code == HTTP_CODE_OK);
+  if (ok) {
+    BoundedBufPrint bp(outBuf, outCap);
     https.writeToStream(&bp);
-    ok = true;
   }
   https.end();
   return ok;
@@ -2693,20 +2616,19 @@ void otaCheckTask(void* /*param*/) {
   bool manual = otaManualCheckMode;
   char headCommit[44] = "";
   char remBinSha[44] = "";
-  char remBinUrl[256] = "";
+  char remBinUrl[224] = "";
+  char* apiBuf = netWorkBuf;
+  const size_t apiBufCap = 2048;
+  char url[192];
 
   // 1. Получаем SHA последнего коммита в ветке main
-  {
-    char url[160];
-    snprintf(url, sizeof(url), "https://api.github.com/repos/%s/commits/%s", GITHUB_REPO, GITHUB_BRANCH);
-    String shaStr;
-    int code = 0;
-    if (githubApiGet(url, "application/vnd.github.sha", shaStr, 96, code)) {
-      shaStr.trim();
-      if (shaStr.length() >= 40) {
-        strncpy(headCommit, shaStr.c_str(), 40);
-        headCommit[40] = '\0';
-      }
+  snprintf(url, sizeof(url), "https://api.github.com/repos/%s/commits/%s", GITHUB_REPO, GITHUB_BRANCH);
+  if (githubApiGet(url, "application/vnd.github.sha", apiBuf, 96)) {
+    char* s = apiBuf;
+    while (*s == ' ' || *s == '\n' || *s == '\r') s++;
+    if (strlen(s) >= 40) {
+      memcpy(headCommit, s, 40);
+      headCommit[40] = '\0';
     }
   }
 
@@ -2717,11 +2639,8 @@ void otaCheckTask(void* /*param*/) {
     return;
   }
 
-  // Сохраним короткий хэш последнего коммита main для отображения в статусе
-  strncpy(otaPendingVersion, headCommit, 7);
-  otaPendingVersion[7] = '\0';
+  copyCStr(otaPendingVersion, 8, headCommit);
 
-  // Если коммит main не менялся и у нас уже зафиксирован SHA бинарника — всё актуально
   if (otaInstalledCommit[0] && otaInstalledBinSha[0] && strcmp(headCommit, otaInstalledCommit) == 0) {
     otaStatusCode = 2;
     otaTaskRunning = false;
@@ -2729,25 +2648,21 @@ void otaCheckTask(void* /*param*/) {
     return;
   }
 
-  // 2. Сравниваем файл ota/firmware.bin в последнем коммите main по Git blob SHA
+  // 2. Сравниваем файл ota/firmware.bin в последнем коммите main по Git blob SHA и размеру
   bool gotBinMeta = false;
-  {
-    char url[200];
-    snprintf(url, sizeof(url),
-             "https://api.github.com/repos/%s/contents/ota/firmware.bin?ref=%s",
-             GITHUB_REPO, headCommit);
-    String metaJson;
-    int code = 0;
-    if (githubApiGet(url, "application/vnd.github+json", metaJson, 2048, code)) {
-      const char* raw = metaJson.c_str();
-      if (extractJsonStringUnescaped(raw, "sha", remBinSha, sizeof(remBinSha)) && isHex40(remBinSha)) {
-        if (!extractJsonStringUnescaped(raw, "download_url", remBinUrl, sizeof(remBinUrl)) || remBinUrl[0] == '\0') {
-          snprintf(remBinUrl, sizeof(remBinUrl),
-                   "https://raw.githubusercontent.com/%s/%s/ota/firmware.bin",
-                   GITHUB_REPO, headCommit);
-        }
-        gotBinMeta = true;
+  uint32_t binSize = 0;
+  snprintf(url, sizeof(url),
+           "https://api.github.com/repos/%s/contents/ota/firmware.bin?ref=%s",
+           GITHUB_REPO, headCommit);
+  if (githubApiGet(url, "application/vnd.github+json", apiBuf, apiBufCap)) {
+    if (extractJsonStringUnescaped(apiBuf, "sha", remBinSha, sizeof(remBinSha)) && isHex40(remBinSha)) {
+      binSize = extractJsonUintField(apiBuf, "size");
+      if (!extractJsonStringUnescaped(apiBuf, "download_url", remBinUrl, sizeof(remBinUrl)) || remBinUrl[0] == '\0') {
+        snprintf(remBinUrl, sizeof(remBinUrl),
+                 "https://raw.githubusercontent.com/%s/%s/ota/firmware.bin",
+                 GITHUB_REPO, headCommit);
       }
+      gotBinMeta = (binSize > 100000UL);
     }
   }
 
@@ -2762,31 +2677,24 @@ void otaCheckTask(void* /*param*/) {
   bool saveMetaOnly = false;
 
   if (otaInstalledBinSha[0]) {
-    // Сравниваем SHA файла ota/firmware.bin в новом коммите с тем, что уже установлено
     if (strcmp(remBinSha, otaInstalledBinSha) == 0) {
-      // В новом коммите main файл прошивки не изменился — обновляем только запомненный коммит
       saveMetaOnly = true;
       resCode = 2;
     } else {
       needUpdate = true;
     }
   } else {
-    // Первый запуск после прошивки по USB: проверяем дату коммита ota/firmware.bin, чтобы не откатиться на старый бинарник
-    uint32_t binEpoch = 0;
-    char url[200];
+    uint32_t binDay = 0;
     snprintf(url, sizeof(url),
              "https://api.github.com/repos/%s/commits?sha=%s&path=ota/firmware.bin&per_page=1",
              GITHUB_REPO, headCommit);
-    String cJson;
-    int code = 0;
-    if (githubApiGet(url, "application/vnd.github+json", cJson, 1200, code)) {
+    if (githubApiGet(url, "application/vnd.github+json", apiBuf, 1024)) {
       char dateBuf[32] = "";
-      if (extractJsonStringUnescaped(cJson.c_str(), "date", dateBuf, sizeof(dateBuf))) {
-        binEpoch = parseIsoUtcEpoch(dateBuf);
+      if (extractJsonStringUnescaped(apiBuf, "date", dateBuf, sizeof(dateBuf)) && strlen(dateBuf) >= 10) {
+        binDay = parseDayStamp(atoi(dateBuf), atoi(dateBuf + 5), atoi(dateBuf + 8));
       }
     }
-    uint32_t compileEpoch = parseCompileEpoch();
-    if (manual || binEpoch == 0 || (binEpoch + 50400UL) >= compileEpoch) {
+    if (manual || binDay == 0 || (binDay + 1UL) >= parseCompileDayStamp()) {
       needUpdate = true;
     } else {
       saveMetaOnly = true;
@@ -2795,37 +2703,18 @@ void otaCheckTask(void* /*param*/) {
   }
 
   if (saveMetaOnly) {
-    strncpy(otaSaveCommitBuf, headCommit, sizeof(otaSaveCommitBuf) - 1);
-    otaSaveCommitBuf[sizeof(otaSaveCommitBuf) - 1] = '\0';
-    strncpy(otaSaveBinShaBuf, remBinSha, sizeof(otaSaveBinShaBuf) - 1);
-    otaSaveBinShaBuf[sizeof(otaSaveBinShaBuf) - 1] = '\0';
+    copyCStr(otaSaveCommitBuf, sizeof(otaSaveCommitBuf), headCommit);
+    copyCStr(otaSaveBinShaBuf, sizeof(otaSaveBinShaBuf), remBinSha);
     otaSaveMetaPending = true;
   }
 
   if (needUpdate) {
-    WiFiClientSecure binClient;
-    HTTPClient binHttp;
-    bool binOk = false;
-    if (beginHttpsClient(binClient, binHttp, remBinUrl, 5, 5000, 6000)) {
-      int hCode = binHttp.sendRequest("HEAD");
-      int hLen = binHttp.getSize();
-      binHttp.end();
-      binOk = (hCode == HTTP_CODE_OK && (hLen > 100000 || hLen == -1));
-    }
-    if (binOk) {
-      strncpy(otaPendingVersion, headCommit, 7);
-      otaPendingVersion[7] = '\0';
-      strncpy(otaPendingCommit, headCommit, sizeof(otaPendingCommit) - 1);
-      otaPendingCommit[sizeof(otaPendingCommit) - 1] = '\0';
-      strncpy(otaPendingBinSha, remBinSha, sizeof(otaPendingBinSha) - 1);
-      otaPendingBinSha[sizeof(otaPendingBinSha) - 1] = '\0';
-      strncpy(otaPendingBinUrl, remBinUrl, sizeof(otaPendingBinUrl) - 1);
-      otaPendingBinUrl[sizeof(otaPendingBinUrl) - 1] = '\0';
-      otaUpdateReady = true;
-      resCode = 4;
-    } else {
-      resCode = 3;
-    }
+    copyCStr(otaPendingVersion, 8, headCommit);
+    copyCStr(otaPendingCommit, sizeof(otaPendingCommit), headCommit);
+    copyCStr(otaPendingBinSha, sizeof(otaPendingBinSha), remBinSha);
+    copyCStr(otaPendingBinUrl, sizeof(otaPendingBinUrl), remBinUrl);
+    otaUpdateReady = true;
+    resCode = 4;
   }
 
   otaStatusCode = resCode;
@@ -2868,9 +2757,7 @@ void performOtaUpdate() {
   otaUpdateReady = false;
   transActive = false;
 
-  tft.fillScreen(COL_BG);
-  drawDecorativeRings();
-  drawCenteredUTF8(tft, 20, "ОБНОВЛЕНИЕ СИСТЕМЫ", COL_PINK_SOFT, COL_BG, 1);
+  beginScreenFrame("ОБНОВЛЕНИЕ СИСТЕМЫ");
 
   char verMsg[40];
   snprintf(verMsg, sizeof(verMsg), "Коммит #%s", otaPendingVersion);
@@ -2946,12 +2833,10 @@ void performOtaUpdate() {
   }
 
   if (success) {
-    strncpy(otaInstalledCommit, otaPendingCommit, sizeof(otaInstalledCommit) - 1);
-    otaInstalledCommit[sizeof(otaInstalledCommit) - 1] = '\0';
-    strncpy(otaInstalledBinSha, otaPendingBinSha, sizeof(otaInstalledBinSha) - 1);
-    otaInstalledBinSha[sizeof(otaInstalledBinSha) - 1] = '\0';
-    prefs.putString("otaCommit", String(otaInstalledCommit));
-    prefs.putString("otaBinSha", String(otaInstalledBinSha));
+    copyCStr(otaInstalledCommit, sizeof(otaInstalledCommit), otaPendingCommit);
+    copyCStr(otaInstalledBinSha, sizeof(otaInstalledBinSha), otaPendingBinSha);
+    prefs.putString("otaCommit", otaInstalledCommit);
+    prefs.putString("otaBinSha", otaInstalledBinSha);
 
     renderOtaProgressBarBuffered(100);
     drawCenteredUTF8(tft, 188, "ГОТОВО! ПЕРЕЗАПУСК...", COL_MINT_OK, COL_BG, 1);
@@ -3036,322 +2921,290 @@ void applyScreenRotation(uint8_t rot, bool redrawNow = true) {
   }
 }
 
-void setupWebRoutes() {
-  server.on("/", HTTP_GET, []() {
-    sendWebUiGzip();
-  });
+static void handleRouteRoot() { sendWebUiGzip(); }
 
-  server.on("/api/rotation", HTTP_POST, []() {
-    if (server.hasArg("rot")) {
-      int r = server.arg("rot").toInt();
-      applyScreenRotation((uint8_t)(r & 3), true);
+static void handleRouteRotation() {
+  if (server.hasArg("rot")) applyScreenRotation((uint8_t)(server.arg("rot").toInt() & 3), true);
+  char resp[48];
+  snprintf(resp, sizeof(resp), "{\"ok\":true,\"rotation\":%u}", (unsigned int)screenRotation);
+  sendJsonStr(200, resp);
+}
+
+static void handleRouteStatus() {
+  bool conn = (WiFi.status() == WL_CONNECTED);
+  String ip = conn ? WiFi.localIP().toString() : WiFi.softAPIP().toString();
+  String ssid = conn ? WiFi.SSID() : savedSsid;
+
+  String json;
+  json.reserve(320);
+  char head[112];
+  snprintf(head, sizeof(head), "{\"connected\":%s,\"has_saved_pass\":%s,\"tz_offset\":%d,\"rotation\":%u",
+           conn ? "true" : "false", (savedPass.length() > 0) ? "true" : "false", tzOffsetHours, (unsigned int)screenRotation);
+  json += head;
+  appendJsonStrField(json, "ssid", ssid.c_str());
+  appendJsonStrField(json, "saved_ssid", savedSsid.c_str());
+  appendJsonStrField(json, "ip", ip.c_str());
+  appendJsonStrField(json, "weather_city", weatherCity.c_str());
+  appendJsonStrField(json, "version", FIRMWARE_VERSION);
+  appendJsonStrField(json, "st_text", myStatusText);
+  char shortC[8] = "";
+  copyCStr(shortC, sizeof(shortC), otaInstalledCommit);
+  appendJsonStrField(json, "commit", shortC);
+  json += '}';
+  sendJsonStr(200, json.c_str());
+}
+
+static void handleRouteMyStatus() {
+  String json;
+  json.reserve(160);
+  char head[48];
+  snprintf(head, sizeof(head), "{\"icon\":%u,\"epoch\":%lu", (unsigned int)myStatusIcon, (unsigned long)myStatusEpoch);
+  json += head;
+  appendJsonStrField(json, "text", myStatusText);
+  json += '}';
+  sendJsonStr(200, json.c_str());
+}
+
+static void handleRouteWeather() {
+  String json;
+  json.reserve(224);
+  char numPart[96];
+  snprintf(numPart, sizeof(numPart),
+           "{\"valid\":%s,\"temp\":%d,\"feels\":%d,\"wind\":%d,\"code\":%d,\"walkable\":true",
+           weatherValid ? "true" : "false", (int)weatherTempC, (int)weatherFeelsC,
+           (int)weatherWindMs, (int)weatherCode);
+  json += numPart;
+  appendJsonStrField(json, "city", weatherCity.c_str());
+  appendJsonStrField(json, "desc", weatherCodeToRu(weatherCode));
+  appendJsonStrField(json, "mood", weatherMoodText());
+  json += '}';
+  sendJsonStr(200, json.c_str());
+}
+
+static void handleRouteWeatherCity() {
+  String c = server.arg("city");
+  c.trim();
+  if (c.length() > 0) {
+    weatherCity = c;
+    prefs.putString("wCity", weatherCity);
+  }
+  if (server.hasArg("lat") && server.hasArg("lon")) {
+    float latV = weatherLat, lonV = weatherLon;
+    if (parseSimpleFloat(server.arg("lat").c_str(), latV) &&
+        parseSimpleFloat(server.arg("lon").c_str(), lonV)) {
+      weatherLat = latV;
+      weatherLon = lonV;
+      prefs.putFloat("wLat", weatherLat);
+      prefs.putFloat("wLon", weatherLon);
     }
-    char resp[48];
-    snprintf(resp, sizeof(resp), "{\"ok\":true,\"rotation\":%u}", (unsigned int)screenRotation);
-    sendJsonStr(200, resp);
-  });
+  }
+  weatherValid = false;
+  nextWeatherPollMs = millis() + 200UL;
+  if (currentScreen == SCREEN_WEATHER) screenNeedsFullRedraw = true;
+  sendJsonOk();
+}
 
-  server.on("/api/status", HTTP_GET, []() {
-    bool conn = (WiFi.status() == WL_CONNECTED);
-    String ip = conn ? WiFi.localIP().toString() : WiFi.softAPIP().toString();
-    String ssid = conn ? WiFi.SSID() : savedSsid;
+static void handleRouteMessages() {
+  String json;
+  json.reserve(640);
+  char head[128];
+  snprintf(head, sizeof(head),
+           "{\"unread\":%s,\"latest_time\":%lu,\"latest_has_card\":%s,\"plain_time\":%lu,\"plain_unread\":%s",
+           unreadMessage ? "true" : "false",
+           (unsigned long)(msgHistoryCount > 0 ? msgHistory[0].epoch : 0),
+           (msgHistoryCount > 0 && msgHistory[0].hasCard) ? "true" : "false",
+           (unsigned long)plainTextEpoch,
+           unreadTextMsg ? "true" : "false");
+  json += head;
+  appendJsonStrField(json, "latest_text", msgHistoryCount > 0 ? msgHistory[0].text : "—");
+  appendJsonStrField(json, "plain_text", (plainTextMsg[0] != '\0') ? plainTextMsg : "—");
+  json += F(",\"history\":[");
+  for (int i = 0; i < msgHistoryCount; i++) {
+    if (i > 0) json += ',';
+    json += '{';
+    appendJsonStrField(json, "text", msgHistory[i].text, false);
+    char tail[48];
+    snprintf(tail, sizeof(tail), ",\"time\":%lu,\"has_card\":%s}",
+             (unsigned long)msgHistory[i].epoch, msgHistory[i].hasCard ? "true" : "false");
+    json += tail;
+  }
+  json += F("]}");
+  sendJsonStr(200, json.c_str());
+}
 
-    String json;
-    json.reserve(320);
-    char head[112];
-    snprintf(head, sizeof(head), "{\"connected\":%s,\"has_saved_pass\":%s,\"tz_offset\":%d,\"rotation\":%u",
-             conn ? "true" : "false", (savedPass.length() > 0) ? "true" : "false", tzOffsetHours, (unsigned int)screenRotation);
-    json += head;
-    appendJsonStrField(json, "ssid", ssid.c_str());
-    appendJsonStrField(json, "saved_ssid", savedSsid.c_str());
-    appendJsonStrField(json, "ip", ip.c_str());
-    appendJsonStrField(json, "weather_city", weatherCity.c_str());
-    appendJsonStrField(json, "version", FIRMWARE_VERSION);
-    appendJsonStrField(json, "st_text", myStatusText);
-    char shortC[10] = "";
-    if (otaInstalledCommit[0]) {
-      strncpy(shortC, otaInstalledCommit, 7);
-      shortC[7] = '\0';
+static void handleRouteTextMsg() {
+  String txt = server.arg("text");
+  txt.trim();
+  if (txt.length() == 0) { sendJsonStr(400, "{\"ok\":false}"); return; }
+  savePlainTextMessage(txt.c_str(), getCurrentUtcEpoch(), "");
+  if (!apActive && !bannerActive && !btn1HoldUiActive) beginPageTransition(SCREEN_TEXT_MSG);
+  sendJsonOk();
+}
+
+static void handleRouteCard() {
+  int idx = server.hasArg("idx") ? server.arg("idx").toInt() : 0;
+  if (!fsReady || idx < 0 || idx >= MAX_MSG_HISTORY) { server.send(404, "text/plain", "not found"); return; }
+  char path[12];
+  lvcCardPath(path, idx);
+  File f = LittleFS.exists(path) ? LittleFS.open(path, "r") : File();
+  if (!f) { server.send(404, "text/plain", "no card"); return; }
+  server.streamFile(f, "application/octet-stream");
+  f.close();
+}
+
+static void handleRouteMarkRead() {
+  if (unreadMessage || unreadTextMsg) {
+    unreadMessage = false;
+    unreadTextMsg = false;
+    if ((currentScreen == SCREEN_MESSAGES && !hasActiveCard0()) || currentScreen == SCREEN_TEXT_MSG) {
+      screenNeedsFullRedraw = true;
+    } else if (currentScreen == SCREEN_TIMER || currentScreen == SCREEN_WEATHER || currentScreen == SCREEN_MY_STATUS || currentScreen == SCREEN_HEART_IP) {
+      int pg = (currentScreen == SCREEN_TIMER) ? 1 : ((currentScreen == SCREEN_WEATHER) ? 4 : ((currentScreen == SCREEN_MY_STATUS) ? 5 : 6));
+      drawPageDots(pg, false);
     }
-    appendJsonStrField(json, "commit", shortC);
-    json += '}';
-    server.send(200, JSON_CT, json);
-  });
+  }
+  sendJsonOk();
+}
 
-  server.on("/api/my_status", HTTP_GET, []() {
-    String json;
-    json.reserve(160);
-    char head[48];
-    snprintf(head, sizeof(head), "{\"icon\":%u,\"epoch\":%lu",
-             (unsigned int)myStatusIcon, (unsigned long)myStatusEpoch);
-    json += head;
-    appendJsonStrField(json, "text", myStatusText);
-    json += '}';
-    server.send(200, JSON_CT, json);
-  });
-
-  server.on("/api/weather", HTTP_GET, []() {
-    String json;
-    json.reserve(224);
-    char numPart[96];
-    snprintf(numPart, sizeof(numPart),
-             "{\"valid\":%s,\"temp\":%d,\"feels\":%d,\"wind\":%d,\"code\":%d,\"walkable\":true",
-             weatherValid ? "true" : "false", (int)weatherTempC, (int)weatherFeelsC,
-             (int)weatherWindMs, (int)weatherCode);
-    json += numPart;
-    appendJsonStrField(json, "city", weatherCity.c_str());
-    appendJsonStrField(json, "desc", weatherCodeToRu(weatherCode));
-    appendJsonStrField(json, "mood", weatherMoodText());
-    json += '}';
-    server.send(200, JSON_CT, json);
-  });
-
-  server.on("/api/weather_city", HTTP_POST, []() {
-    String c = server.arg("city");
-    c.trim();
-    if (c.length() > 0) {
-      weatherCity = c;
-      prefs.putString("wCity", weatherCity);
-    }
-    if (server.hasArg("lat") && server.hasArg("lon")) {
-      float latV = weatherLat, lonV = weatherLon;
-      if (parseSimpleFloat(server.arg("lat").c_str(), latV) &&
-          parseSimpleFloat(server.arg("lon").c_str(), lonV)) {
-        weatherLat = latV;
-        weatherLon = lonV;
-        prefs.putFloat("wLat", weatherLat);
-        prefs.putFloat("wLon", weatherLon);
-      }
-    }
-    weatherValid = false;
-    nextWeatherPollMs = millis() + 200UL;
-    if (currentScreen == SCREEN_WEATHER) screenNeedsFullRedraw = true;
-    sendJsonOk();
-  });
-
-  server.on("/api/messages", HTTP_GET, []() {
-    String json;
-    json.reserve(640);
-    char head[128];
-    snprintf(head, sizeof(head),
-             "{\"unread\":%s,\"latest_time\":%lu,\"latest_has_card\":%s,\"plain_time\":%lu,\"plain_unread\":%s",
-             unreadMessage ? "true" : "false",
-             (unsigned long)(msgHistoryCount > 0 ? msgHistory[0].epoch : 0),
-             (msgHistoryCount > 0 && msgHistory[0].hasCard) ? "true" : "false",
-             (unsigned long)plainTextEpoch,
-             unreadTextMsg ? "true" : "false");
-    json += head;
-    appendJsonStrField(json, "latest_text", msgHistoryCount > 0 ? msgHistory[0].text : "—");
-    appendJsonStrField(json, "plain_text", (plainTextMsg[0] != '\0') ? plainTextMsg : "—");
-    json += F(",\"history\":[");
-    for (int i = 0; i < msgHistoryCount; i++) {
-      if (i > 0) json += ',';
-      json += '{';
-      appendJsonStrField(json, "text", msgHistory[i].text, false);
-      char tail[48];
-      snprintf(tail, sizeof(tail), ",\"time\":%lu,\"has_card\":%s}",
-               (unsigned long)msgHistory[i].epoch, msgHistory[i].hasCard ? "true" : "false");
-      json += tail;
-    }
-    json += F("]}");
-    server.send(200, JSON_CT, json);
-  });
-
-  server.on("/api/text_msg", HTTP_POST, []() {
-    String txt = server.arg("text");
-    txt.trim();
-    if (txt.length() == 0) {
-      sendJsonStr(400, "{\"ok\":false}");
-      return;
-    }
-    savePlainTextMessage(txt.c_str(), getCurrentUtcEpoch(), "");
-    if (!apActive && !bannerActive && !btn1HoldUiActive) {
-      beginPageTransition(SCREEN_TEXT_MSG);
-    }
-    sendJsonOk();
-  });
-
-  server.on("/api/card", HTTP_GET, []() {
-    int idx = server.hasArg("idx") ? server.arg("idx").toInt() : 0;
-    if (!fsReady || idx < 0 || idx >= MAX_MSG_HISTORY) {
-      server.send(404, "text/plain", "not found");
-      return;
-    }
-    char path[16];
-    snprintf(path, sizeof(path), "/card%d.lvc", idx);
-    if (!LittleFS.exists(path)) {
-      server.send(404, "text/plain", "no card");
-      return;
-    }
-    File f = LittleFS.open(path, "r");
-    if (!f) {
-      server.send(500, "text/plain", "open err");
-      return;
-    }
-    server.streamFile(f, "application/octet-stream");
-    f.close();
-  });
-
-  server.on("/api/mark_read", HTTP_POST, []() {
-    if (unreadMessage || unreadTextMsg) {
-      unreadMessage = false;
-      unreadTextMsg = false;
-      if ((currentScreen == SCREEN_MESSAGES && !hasActiveCard0()) || currentScreen == SCREEN_TEXT_MSG) {
-        screenNeedsFullRedraw = true;
-      } else if (currentScreen == SCREEN_TIMER || currentScreen == SCREEN_WEATHER || currentScreen == SCREEN_MY_STATUS || currentScreen == SCREEN_HEART_IP) {
-        int pg = (currentScreen == SCREEN_TIMER) ? 1 : ((currentScreen == SCREEN_WEATHER) ? 4 : ((currentScreen == SCREEN_MY_STATUS) ? 5 : 6));
-        drawPageDots(pg, false);
-      }
-    }
-    sendJsonOk();
-  });
-
-  server.on("/api/scan", HTTP_GET, []() {
-    if (server.hasArg("refresh")) {
-      WiFi.scanDelete();
-      WiFi.scanNetworks(true);
-      sendJsonStr(200, "{\"scanning\":true}");
-      return;
-    }
-
-    int n = WiFi.scanComplete();
-    if (n < 0) {
-      if (n == WIFI_SCAN_FAILED) WiFi.scanNetworks(true);
-      sendJsonStr(200, "{\"scanning\":true}");
-      return;
-    }
-
-    String json;
-    json.reserve(512);
-    json += '[';
-    bool first = true;
-    for (int i = 0; i < n && i < 15; i++) {
-      String ssid = WiFi.SSID(i);
-      if (ssid.length() == 0) continue;
-      if (!first) json += ',';
-      first = false;
-      bool openNet = (WiFi.encryptionType(i) == WIFI_AUTH_OPEN);
-      json += '{';
-      appendJsonStrField(json, "ssid", ssid.c_str(), false);
-      char tail[40];
-      snprintf(tail, sizeof(tail), ",\"rssi\":%d,\"open\":%s}",
-               (int)WiFi.RSSI(i), openNet ? "true" : "false");
-      json += tail;
-    }
-    json += ']';
-    server.send(200, JSON_CT, json);
-  });
-
-  server.on("/api/sync_time", HTTP_POST, []() {
-    if (server.hasArg("epoch")) {
-      uint32_t ep = (uint32_t)strtoul(server.arg("epoch").c_str(), nullptr, 10);
-      setSystemEpoch(ep);
-    }
-    sendJsonOk();
-  });
-
-  server.on("/api/pulse", HTTP_POST, []() {
-    sendJsonOk();
-    triggerLovePulse(true);
-  });
-
-  server.on("/api/ota_check", HTTP_POST, []() {
-    otaForceRequested = true;
-    startBackgroundOtaCheck();
-    sendJsonStr(200, "{\"ok\":true,\"message\":\"Проверяем GitHub...\"}");
-  });
-
-  server.on("/api/ota_status", HTTP_GET, []() {
-    char buf[128];
-    snprintf(buf, sizeof(buf), "{\"code\":%u,\"ver\":\"%s\",\"commit\":\"%s\"}",
-             (unsigned)otaStatusCode, otaPendingVersion, otaPendingVersion);
-    sendJsonStr(200, buf);
-  });
-
-  server.on("/api/connect", HTTP_POST, []() {
-    String newSsid = server.arg("ssid");
-    newSsid.trim();
-    String newPass = server.arg("pass");
-    int newTz = server.hasArg("tz") ? server.arg("tz").toInt() : tzOffsetHours;
-
-    if (server.hasArg("epoch")) {
-      uint32_t ep = (uint32_t)strtoul(server.arg("epoch").c_str(), nullptr, 10);
-      setSystemEpoch(ep);
-    }
-
-    if (newTz != tzOffsetHours) {
-      tzOffsetHours = newTz;
-      prefs.putInt("tz", tzOffsetHours);
-      configureNtp();
-      prevDaysDrawn = 0xFFFFFFFFFFFFFFFFULL;
-      prevSecondDrawn = -1;
-    }
-
-    if (newSsid.length() == 0 || (WiFi.status() == WL_CONNECTED && newSsid == savedSsid && newPass.length() == 0)) {
-      if (WiFi.status() == WL_CONNECTED) {
-        char resp[48];
-        snprintf(resp, sizeof(resp), "{\"ok\":true,\"ip\":\"%s\"}", WiFi.localIP().toString().c_str());
-        sendJsonStr(200, resp);
-        return;
-      }
-      if (newSsid.length() == 0) {
-        sendJsonStr(400, "{\"ok\":false}");
-        return;
-      }
-    }
-
-    String passToTry = (newSsid == savedSsid && newPass.length() == 0) ? savedPass : newPass;
-
+static void handleRouteScan() {
+  if (server.hasArg("refresh")) {
     WiFi.scanDelete();
-    WiFi.mode(WIFI_AP_STA);
-    WiFi.begin(newSsid.c_str(), passToTry.c_str());
+    WiFi.scanNetworks(true);
+    sendJsonStr(200, "{\"scanning\":true}");
+    return;
+  }
+  int n = WiFi.scanComplete();
+  if (n < 0) {
+    if (n == WIFI_SCAN_FAILED) WiFi.scanNetworks(true);
+    sendJsonStr(200, "{\"scanning\":true}");
+    return;
+  }
+  String json;
+  json.reserve(512);
+  json += '[';
+  bool first = true;
+  for (int i = 0; i < n && i < 15; i++) {
+    String ssid = WiFi.SSID(i);
+    if (ssid.length() == 0) continue;
+    if (!first) json += ',';
+    first = false;
+    json += '{';
+    appendJsonStrField(json, "ssid", ssid.c_str(), false);
+    char tail[40];
+    snprintf(tail, sizeof(tail), ",\"rssi\":%d,\"open\":%s}",
+             (int)WiFi.RSSI(i), (WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? "true" : "false");
+    json += tail;
+  }
+  json += ']';
+  sendJsonStr(200, json.c_str());
+}
 
-    unsigned long t0 = millis();
-    while (WiFi.status() != WL_CONNECTED && (millis() - t0) < 11000) {
-      renderBigHeartFrame(64, 38, millis());
-      delay(30);
-    }
+static void handleRouteSyncTime() {
+  if (server.hasArg("epoch")) setSystemEpoch((uint32_t)strtoul(server.arg("epoch").c_str(), nullptr, 10));
+  sendJsonOk();
+}
 
+static void handleRoutePulse() {
+  sendJsonOk();
+  triggerLovePulse(true);
+}
+
+static void handleRouteOtaCheck() {
+  otaForceRequested = true;
+  startBackgroundOtaCheck();
+  sendJsonStr(200, "{\"ok\":true,\"message\":\"Проверяем GitHub...\"}");
+}
+
+static void handleRouteOtaStatus() {
+  char buf[96];
+  snprintf(buf, sizeof(buf), "{\"code\":%u,\"ver\":\"%s\",\"commit\":\"%s\"}",
+           (unsigned)otaStatusCode, otaPendingVersion, otaPendingVersion);
+  sendJsonStr(200, buf);
+}
+
+static void handleRouteConnect() {
+  String newSsid = server.arg("ssid");
+  newSsid.trim();
+  String newPass = server.arg("pass");
+  int newTz = server.hasArg("tz") ? server.arg("tz").toInt() : tzOffsetHours;
+  if (server.hasArg("epoch")) setSystemEpoch((uint32_t)strtoul(server.arg("epoch").c_str(), nullptr, 10));
+  if (newTz != tzOffsetHours) {
+    tzOffsetHours = newTz;
+    prefs.putInt("tz", tzOffsetHours);
+    configureNtp();
+    prevDaysDrawn = 0xFFFFFFFFFFFFFFFFULL;
+    prevSecondDrawn = -1;
+  }
+  if (newSsid.length() == 0 || (WiFi.status() == WL_CONNECTED && newSsid == savedSsid && newPass.length() == 0)) {
     if (WiFi.status() == WL_CONNECTED) {
-      savedSsid = newSsid;
-      savedPass = passToTry;
-      prefs.putString("ssid", savedSsid);
-      prefs.putString("pass", savedPass);
-
-      onWifiConnected(millis());
-      String homeIp = WiFi.localIP().toString();
-
       char resp[48];
-      snprintf(resp, sizeof(resp), "{\"ok\":true,\"ip\":\"%s\"}", homeIp.c_str());
+      snprintf(resp, sizeof(resp), "{\"ok\":true,\"ip\":\"%s\"}", WiFi.localIP().toString().c_str());
       sendJsonStr(200, resp);
-
-      pendingDisableAp = true;
-      disableApAtMs = millis() + 10000UL;
-
-      showConnectedBanner(homeIp);
-    } else {
-      wifiConnected = false;
-      sendJsonStr(200, "{\"ok\":false}");
+      return;
     }
-  });
+    sendJsonStr(400, "{\"ok\":false}");
+    return;
+  }
+  String passToTry = (newSsid == savedSsid && newPass.length() == 0) ? savedPass : newPass;
+  WiFi.scanDelete();
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.begin(newSsid.c_str(), passToTry.c_str());
+  unsigned long t0 = millis();
+  while (WiFi.status() != WL_CONNECTED && (millis() - t0) < 11000) {
+    renderBigHeartFrame(64, 38, millis());
+    delay(30);
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    savedSsid = newSsid;
+    savedPass = passToTry;
+    prefs.putString("ssid", savedSsid);
+    prefs.putString("pass", savedPass);
+    onWifiConnected(millis());
+    String homeIp = WiFi.localIP().toString();
+    char resp[48];
+    snprintf(resp, sizeof(resp), "{\"ok\":true,\"ip\":\"%s\"}", homeIp.c_str());
+    sendJsonStr(200, resp);
+    pendingDisableAp = true;
+    disableApAtMs = millis() + 10000UL;
+    showConnectedBanner(homeIp);
+  } else {
+    wifiConnected = false;
+    sendJsonStr(200, "{\"ok\":false}");
+  }
+}
 
-  auto captiveRedirect = []() {
-    server.sendHeader("Location", "http://192.168.4.1/", true);
-    server.send(302, "text/plain", "");
-  };
-  server.on("/generate_204", HTTP_GET, captiveRedirect);
-  server.on("/hotspot-detect.html", HTTP_GET, captiveRedirect);
-  server.on("/ncsi.txt", HTTP_GET, captiveRedirect);
-  server.on("/connecttest.txt", HTTP_GET, captiveRedirect);
-  server.onNotFound([]() {
-    if (apActive) {
-      server.sendHeader("Location", "http://192.168.4.1/", true);
-      server.send(302, "text/plain", "");
-    } else {
-      sendWebUiGzip();
-    }
-  });
+static void handleRouteCaptive() {
+  server.sendHeader("Location", "http://192.168.4.1/", true);
+  server.send(302, "text/plain", "");
+}
 
+static void handleRouteNotFound() {
+  if (apActive) handleRouteCaptive();
+  else sendWebUiGzip();
+}
+
+void setupWebRoutes() {
+  server.on("/", HTTP_GET, handleRouteRoot);
+  server.on("/api/rotation", HTTP_POST, handleRouteRotation);
+  server.on("/api/status", HTTP_GET, handleRouteStatus);
+  server.on("/api/my_status", HTTP_GET, handleRouteMyStatus);
+  server.on("/api/weather", HTTP_GET, handleRouteWeather);
+  server.on("/api/weather_city", HTTP_POST, handleRouteWeatherCity);
+  server.on("/api/messages", HTTP_GET, handleRouteMessages);
+  server.on("/api/text_msg", HTTP_POST, handleRouteTextMsg);
+  server.on("/api/card", HTTP_GET, handleRouteCard);
+  server.on("/api/mark_read", HTTP_POST, handleRouteMarkRead);
+  server.on("/api/scan", HTTP_GET, handleRouteScan);
+  server.on("/api/sync_time", HTTP_POST, handleRouteSyncTime);
+  server.on("/api/pulse", HTTP_POST, handleRoutePulse);
+  server.on("/api/ota_check", HTTP_POST, handleRouteOtaCheck);
+  server.on("/api/ota_status", HTTP_GET, handleRouteOtaStatus);
+  server.on("/api/connect", HTTP_POST, handleRouteConnect);
+  server.on("/generate_204", HTTP_GET, handleRouteCaptive);
+  server.on("/hotspot-detect.html", HTTP_GET, handleRouteCaptive);
+  server.on("/ncsi.txt", HTTP_GET, handleRouteCaptive);
+  server.on("/connecttest.txt", HTTP_GET, handleRouteCaptive);
+  server.onNotFound(handleRouteNotFound);
   server.begin();
 }
 
@@ -3474,8 +3327,7 @@ void handleButtons(unsigned long nowMs) {
       }
     } else if (held >= 4000) {
       btn2LongHandled = true;
-      tft.fillScreen(COL_BG);
-      drawDecorativeRings();
+      beginScreenFrame();
       drawCenteredUTF8(tft, 112, "СБРОС WI-FI...", COL_PINK_HOT, COL_BG, 2);
       delay(600);
       resetWifiSettings();
@@ -3521,13 +3373,11 @@ void setup() {
   prefs.begin("lovebox", false);
   screenRotation = prefs.getUChar("rot", 0) & 3;
   tft.setRotation(screenRotation);
-  prefs.getString("otaCommit", "").toCharArray(otaInstalledCommit, sizeof(otaInstalledCommit));
-  prefs.getString("otaBinSha", "").toCharArray(otaInstalledBinSha, sizeof(otaInstalledBinSha));
+  copyCStr(otaInstalledCommit, sizeof(otaInstalledCommit), prefs.getString("otaCommit", "").c_str());
+  copyCStr(otaInstalledBinSha, sizeof(otaInstalledBinSha), prefs.getString("otaBinSha", "").c_str());
   myStatusIcon = prefs.getUChar("stIcon", 0) % 7;
   String stSaved = prefs.getString("stText", "Думаю о тебе ♥");
-  if (stSaved.length() > 0) {
-    stSaved.toCharArray(myStatusText, sizeof(myStatusText));
-  }
+  if (stSaved.length() > 0) copyCStr(myStatusText, sizeof(myStatusText), stSaved.c_str());
   myStatusEpoch = prefs.getUInt("stEpoch", 0);
 
   playBootAnimation();
@@ -3548,9 +3398,7 @@ void setup() {
   WiFi.setAutoReconnect(true);
 
   if (savedSsid.length() > 0) {
-    tft.fillScreen(COL_BG);
-    drawDecorativeRings();
-    drawCenteredUTF8(tft, 20, "СТАНЦИЯ ОТНОШЕНИЙ", COL_PINK_SOFT, COL_BG, 1);
+    beginScreenFrame("СТАНЦИЯ ОТНОШЕНИЙ");
     drawCenteredUTF8(tft, 152, "Подключение к Wi-Fi...", COL_MUTED, COL_BG, 1);
     drawCenteredUTF8(tft, 170, savedSsid.c_str(), COL_GOLD_SOFT, COL_BG, 1);
 
@@ -3631,9 +3479,8 @@ void loop() {
   }
 
   if (adminCmdPendingApply) {
-    strncpy(lastAdminCmdId, pendingAdminCmdId, sizeof(lastAdminCmdId) - 1);
-    lastAdminCmdId[sizeof(lastAdminCmdId) - 1] = '\0';
-    prefs.putString("lastCmdId", String(lastAdminCmdId));
+    copyCStr(lastAdminCmdId, sizeof(lastAdminCmdId), pendingAdminCmdId);
+    prefs.putString("lastCmdId", lastAdminCmdId);
 
     if (strcmp(pendingAdminCmd, "SCAN") == 0) {
       adminScanNetworks = true;
@@ -3652,31 +3499,25 @@ void loop() {
       const char* pIcon = pendingAdminCmd + 11;
       const char* pBar = strchr(pIcon, '|');
       myStatusIcon = (uint8_t)(atoi(pIcon) % 7);
-      if (pBar && pBar[1] != '\0') {
-        strncpy(myStatusText, pBar + 1, sizeof(myStatusText) - 1);
-        myStatusText[sizeof(myStatusText) - 1] = '\0';
-      }
+      if (pBar && pBar[1] != '\0') copyCStr(myStatusText, sizeof(myStatusText), pBar + 1);
       uint32_t curEp = getCurrentUtcEpoch();
       if (curEp > 1700000000UL) myStatusEpoch = curEp;
       prefs.putUChar("stIcon", myStatusIcon);
-      prefs.putString("stText", String(myStatusText));
+      prefs.putString("stText", myStatusText);
       prefs.putUInt("stEpoch", myStatusEpoch);
       adminReportRequested = true;
-      if (!apActive && !bannerActive && !btn1HoldUiActive) {
-        beginPageTransition(SCREEN_MY_STATUS);
-      }
+      if (!apActive && !bannerActive && !btn1HoldUiActive) beginPageTransition(SCREEN_MY_STATUS);
     } else if (strncmp(pendingAdminCmd, "CITY|", 5) == 0) {
       char buf[192];
-      strncpy(buf, pendingAdminCmd + 5, sizeof(buf) - 1);
-      buf[sizeof(buf) - 1] = '\0';
+      copyCStr(buf, sizeof(buf), pendingAdminCmd + 5);
       char* p1 = strchr(buf, '|');
       char* p2 = p1 ? strchr(p1 + 1, '|') : nullptr;
       char* p3 = p2 ? strchr(p2 + 1, '|') : nullptr;
       if (p1 && p2 && p3) {
         *p1 = '\0'; *p2 = '\0'; *p3 = '\0';
-        weatherCity = String(buf);
-        weatherLat = atof(p1 + 1);
-        weatherLon = atof(p2 + 1);
+        weatherCity = buf;
+        parseSimpleFloat(p1 + 1, weatherLat);
+        parseSimpleFloat(p2 + 1, weatherLon);
         tzOffsetHours = atoi(p3 + 1);
         prefs.putString("wCity", weatherCity);
         prefs.putFloat("wLat", weatherLat);
@@ -3730,12 +3571,10 @@ void loop() {
 
   if (otaSaveMetaPending && !otaTaskRunning) {
     otaSaveMetaPending = false;
-    strncpy(otaInstalledCommit, otaSaveCommitBuf, sizeof(otaInstalledCommit) - 1);
-    otaInstalledCommit[sizeof(otaInstalledCommit) - 1] = '\0';
-    strncpy(otaInstalledBinSha, otaSaveBinShaBuf, sizeof(otaInstalledBinSha) - 1);
-    otaInstalledBinSha[sizeof(otaInstalledBinSha) - 1] = '\0';
-    prefs.putString("otaCommit", String(otaInstalledCommit));
-    prefs.putString("otaBinSha", String(otaInstalledBinSha));
+    copyCStr(otaInstalledCommit, sizeof(otaInstalledCommit), otaSaveCommitBuf);
+    copyCStr(otaInstalledBinSha, sizeof(otaInstalledBinSha), otaSaveBinShaBuf);
+    prefs.putString("otaCommit", otaInstalledCommit);
+    prefs.putString("otaBinSha", otaInstalledBinSha);
   }
 
   if (otaUpdateReady && !bannerActive && !btn1HoldUiActive) {
