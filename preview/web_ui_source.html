@@ -6,15 +6,17 @@
   <title>Станция отношений</title>
   <style>
     :root {
-      --bg-top: #fff2f6;
-      --bg-bottom: #fde6ee;
-      --card-bg: rgba(255, 255, 255, 0.90);
-      --pink-main: #f04372;
-      --pink-dark: #d42a58;
-      --text-main: #3f222e;
-      --text-muted: #87586a;
-      --ok-bg: #eafaf1;
-      --ok-text: #1b7a46;
+      --bg: #07050c;
+      --card: rgba(16, 12, 24, 0.78);
+      --surface: rgba(255, 255, 255, 0.045);
+      --border: rgba(255, 255, 255, 0.095);
+      --pink: #ff3d77;
+      --pink-soft: #ff85ab;
+      --violet: #a855f7;
+      --text: #faf5f8;
+      --muted: #a694a8;
+      --ok: #34d399;
+      --err: #fb7185;
     }
 
     * {
@@ -25,36 +27,64 @@
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background: linear-gradient(160deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
-      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
       min-height: 100vh;
-      padding: 20px 16px 44px;
+      padding: 22px 16px 48px;
       position: relative;
       overflow-x: hidden;
     }
 
-    .bg-hearts {
+    /* React Bits: Dot Field + Soft Aurora Background */
+    .dot-field {
       position: fixed;
       inset: 0;
       pointer-events: none;
       z-index: 0;
+      background-image: radial-gradient(rgba(255, 255, 255, 0.075) 1px, transparent 1px);
+      background-size: 24px 24px;
+      mask-image: radial-gradient(ellipse 85% 75% at 50% 28%, #000 35%, transparent 100%);
+      -webkit-mask-image: radial-gradient(ellipse 85% 75% at 50% 28%, #000 35%, transparent 100%);
+    }
+
+    .aurora-bg {
+      position: fixed;
+      inset: -20%;
+      pointer-events: none;
+      z-index: 0;
       overflow: hidden;
+      filter: blur(68px);
+      opacity: 0.62;
     }
 
-    .bg-heart {
+    .aurora-band {
       position: absolute;
-      bottom: -40px;
-      color: rgba(240, 67, 114, 0.12);
-      animation: floatUp linear infinite;
-      user-select: none;
+      width: 68vmax;
+      height: 48vmax;
+      border-radius: 50%;
+      mix-blend-mode: screen;
+      animation: auroraDrift 16s ease-in-out infinite alternate;
     }
 
-    @keyframes floatUp {
-      0% { transform: translateY(0) scale(0.85) rotate(0deg); opacity: 0; }
-      15% { opacity: 1; }
-      85% { opacity: 1; }
-      100% { transform: translateY(-110vh) scale(1.2) rotate(20deg); opacity: 0; }
+    .aurora-1 {
+      top: -12%;
+      left: -8%;
+      background: radial-gradient(circle, rgba(255, 61, 119, 0.48) 0%, rgba(168, 85, 247, 0.18) 52%, transparent 74%);
+    }
+
+    .aurora-2 {
+      bottom: -15%;
+      right: -10%;
+      background: radial-gradient(circle, rgba(168, 85, 247, 0.38) 0%, rgba(255, 122, 162, 0.16) 50%, transparent 74%);
+      animation-delay: -8s;
+      animation-duration: 21s;
+    }
+
+    @keyframes auroraDrift {
+      0% { transform: translate3d(0, 0, 0) scale(1) rotate(0deg); }
+      50% { transform: translate3d(6vw, 4vh, 0) scale(1.12) rotate(12deg); }
+      100% { transform: translate3d(-5vw, -3vh, 0) scale(0.95) rotate(-8deg); }
     }
 
     .container {
@@ -66,62 +96,100 @@
 
     .header {
       text-align: center;
-      margin-bottom: 16px;
-      padding-top: 4px;
+      margin-bottom: 18px;
+      padding-top: 6px;
     }
 
+    /* React Bits: Pulse Heart */
     .heart-avatar {
-      width: 68px;
-      height: 68px;
-      margin: 0 auto 10px;
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 12px;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: radial-gradient(circle at 35% 30%, #ff82a1, #e82e61);
+      position: relative;
+      background: linear-gradient(145deg, rgba(255, 61, 119, 0.28), rgba(168, 85, 247, 0.22));
+      border: 1px solid rgba(255, 133, 171, 0.42);
       border-radius: 50%;
-      box-shadow: 0 10px 24px rgba(232, 46, 97, 0.28);
-      animation: heartbeat 1.5s ease-in-out infinite;
+      box-shadow: 0 0 32px rgba(255, 61, 119, 0.30), inset 0 1px 1px rgba(255, 255, 255, 0.25);
+      animation: heartbeat 1.7s ease-in-out infinite;
+    }
+
+    .heart-avatar::after {
+      content: "";
+      position: absolute;
+      inset: -6px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 61, 119, 0.35);
+      animation: pulseRing 2.2s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
     }
 
     .heart-avatar svg {
-      width: 36px;
-      height: 36px;
-      fill: #ffffff;
+      width: 30px;
+      height: 30px;
+      fill: #ff5c8d;
+      filter: drop-shadow(0 0 10px rgba(255, 61, 119, 0.65));
     }
 
     @keyframes heartbeat {
       0%, 100% { transform: scale(1); }
-      14% { transform: scale(1.11); }
+      14% { transform: scale(1.09); }
       28% { transform: scale(1); }
-      42% { transform: scale(1.06); }
+      42% { transform: scale(1.05); }
       65% { transform: scale(1); }
     }
 
+    @keyframes pulseRing {
+      0% { transform: scale(0.95); opacity: 0.7; }
+      100% { transform: scale(1.32); opacity: 0; }
+    }
+
+    /* React Bits: BlurText + ShinyText */
     .title {
-      font-size: 23px;
+      font-size: 24px;
       font-weight: 800;
-      letter-spacing: -0.3px;
-      color: var(--text-main);
+      letter-spacing: -0.5px;
+      background: linear-gradient(110deg, #ffffff 25%, #ffb6cf 48%, #ffffff 72%);
+      background-size: 220% 100%;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: blurReveal 0.65s cubic-bezier(0.22, 1, 0.36, 1) both, shineSweep 5.5s linear infinite;
     }
 
     .subtitle {
-      font-size: 13.5px;
-      color: var(--text-muted);
-      margin-top: 3px;
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 4px;
+      letter-spacing: 0.1px;
+      animation: blurReveal 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
     }
 
+    @keyframes blurReveal {
+      from { opacity: 0; filter: blur(8px); transform: translateY(6px); }
+      to { opacity: 1; filter: blur(0); transform: translateY(0); }
+    }
+
+    @keyframes shineSweep {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* React Bits: Status Mark */
     .badge {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      margin-top: 9px;
-      padding: 5px 13px;
+      gap: 8px;
+      margin-top: 11px;
+      padding: 6px 14px;
       border-radius: 999px;
       font-size: 12px;
       font-weight: 600;
-      background: rgba(255, 255, 255, 0.80);
-      border: 1px solid rgba(240, 67, 114, 0.20);
-      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.045);
+      border: 1px solid rgba(255, 255, 255, 0.11);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      color: #dfd3e0;
     }
 
     .dot {
@@ -129,35 +197,59 @@
       height: 8px;
       border-radius: 50%;
       background: #f59e0b;
+      box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
     }
 
     .dot.online {
       background: #22c55e;
-      box-shadow: 0 0 8px rgba(34, 197, 94, 0.50);
+      box-shadow: 0 0 10px rgba(34, 197, 94, 0.8);
     }
 
-    /* Вкладки страниц 1 и 2 */
+    /* React Bits: Rubber Segment / Sliding Pill Tabs */
     .tabs {
+      position: relative;
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      background: rgba(255, 255, 255, 0.65);
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.04);
       padding: 5px;
       border-radius: 18px;
-      margin-bottom: 14px;
-      border: 1px solid rgba(240, 67, 114, 0.16);
+      margin-bottom: 16px;
+      border: 1px solid var(--border);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+
+    .tab-slider {
+      position: absolute;
+      top: 5px;
+      bottom: 5px;
+      left: 5px;
+      width: calc(50% - 8px);
+      border-radius: 13px;
+      background: linear-gradient(135deg, rgba(255, 61, 119, 0.24), rgba(168, 85, 247, 0.18));
+      border: 1px solid rgba(255, 133, 171, 0.34);
+      box-shadow: 0 4px 16px rgba(255, 61, 119, 0.18);
+      transition: transform 0.32s cubic-bezier(0.34, 1.45, 0.64, 1);
+      pointer-events: none;
+    }
+
+    .tabs[data-active="2"] .tab-slider {
+      transform: translateX(calc(100% + 6px));
     }
 
     .tab-btn {
+      position: relative;
+      z-index: 1;
       border: none;
-      border-radius: 14px;
+      border-radius: 13px;
       padding: 10px 8px;
-      font-size: 14px;
+      font-size: 13.5px;
       font-weight: 700;
       background: transparent;
-      color: var(--text-muted);
+      color: var(--muted);
       cursor: pointer;
-      transition: 0.18s;
+      transition: color 0.2s;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -165,29 +257,64 @@
     }
 
     .tab-btn.active {
-      background: #ffffff;
-      color: var(--pink-dark);
-      box-shadow: 0 4px 12px rgba(212, 42, 88, 0.12);
+      color: #ffffff;
     }
 
     .unread-pill {
-      background: var(--pink-main);
+      background: var(--pink);
       color: #fff;
       font-size: 10.5px;
-      padding: 2px 6px;
+      padding: 1.5px 6px;
       border-radius: 999px;
       font-weight: 800;
+      box-shadow: 0 0 10px rgba(255, 61, 119, 0.6);
     }
 
+    /* React Bits: Border Glow + Spotlight Card */
     .card {
-      background: var(--card-bg);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border-radius: 24px;
+      position: relative;
+      background: var(--card);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-radius: 26px;
       padding: 22px 18px;
       margin-bottom: 16px;
-      box-shadow: 0 10px 28px rgba(175, 58, 94, 0.09);
-      border: 1px solid rgba(255, 255, 255, 0.92);
+      border: 1px solid var(--border);
+      box-shadow: 0 18px 46px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+      --mx: 50%;
+      --my: 0%;
+      --glow-o: 0;
+    }
+
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      padding: 1.2px;
+      background: radial-gradient(240px circle at var(--mx) var(--my), rgba(255, 85, 145, 0.72), rgba(168, 85, 247, 0.35) 45%, transparent 72%);
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      opacity: var(--glow-o);
+      transition: opacity 0.28s ease;
+      pointer-events: none;
+    }
+
+    .card::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(320px circle at var(--mx) var(--my), rgba(255, 61, 119, 0.09), transparent 65%);
+      opacity: var(--glow-o);
+      transition: opacity 0.28s ease;
+      pointer-events: none;
+    }
+
+    .card > * {
+      position: relative;
+      z-index: 1;
     }
 
     .card-title {
@@ -195,22 +322,24 @@
       font-weight: 700;
       text-align: center;
       margin-bottom: 6px;
+      letter-spacing: -0.2px;
     }
 
     .card-desc {
-      font-size: 14px;
+      font-size: 13.5px;
       line-height: 1.5;
-      color: var(--text-muted);
+      color: var(--muted);
       text-align: center;
       margin-bottom: 16px;
     }
 
     .since-pill {
       display: inline-block;
-      background: #fff0f5;
-      color: var(--pink-dark);
-      font-weight: 700;
-      font-size: 13px;
+      background: rgba(255, 61, 119, 0.12);
+      border: 1px solid rgba(255, 133, 171, 0.28);
+      color: #ffc2d6;
+      font-weight: 600;
+      font-size: 12.5px;
       padding: 5px 14px;
       border-radius: 999px;
       margin-bottom: 14px;
@@ -221,25 +350,29 @@
     }
 
     .days-hero {
-      margin: 4px 0 16px;
+      margin: 2px 0 18px;
     }
 
     .days-number {
-      font-size: 52px;
+      font-size: 54px;
       font-weight: 900;
-      line-height: 1.05;
-      background: linear-gradient(135deg, #e82e61, #ff6b8b);
+      line-height: 1.04;
+      letter-spacing: -1.5px;
+      font-variant-numeric: tabular-nums;
+      background: linear-gradient(125deg, #ffffff 10%, #ff8cb2 52%, #ff3d77 95%);
+      background-size: 200% 100%;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
+      animation: shineSweep 7s linear infinite;
       word-break: break-word;
     }
 
     .days-word {
-      font-size: 15px;
+      font-size: 13px;
       font-weight: 700;
-      color: var(--text-muted);
-      margin-top: 4px;
-      letter-spacing: 1px;
+      color: var(--muted);
+      margin-top: 6px;
+      letter-spacing: 2px;
       text-transform: uppercase;
     }
 
@@ -247,133 +380,168 @@
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       gap: 10px;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
     }
 
     .time-box {
-      background: linear-gradient(180deg, #fff8fa 0%, #ffeff4 100%);
-      border: 1px solid #ffd9e5;
+      background: rgba(255, 255, 255, 0.038);
+      border: 1px solid rgba(255, 255, 255, 0.085);
       border-radius: 18px;
-      padding: 12px 6px;
+      padding: 13px 6px;
       text-align: center;
     }
 
     .time-val {
-      font-size: 24px;
+      font-size: 25px;
       font-weight: 800;
-      color: var(--text-main);
+      color: #ffffff;
       font-variant-numeric: tabular-nums;
     }
 
     .time-lbl {
       font-size: 11.5px;
       font-weight: 600;
-      color: var(--text-muted);
+      color: var(--muted);
       margin-top: 3px;
     }
 
     .totals-box {
-      background: #fff8fa;
+      background: rgba(255, 255, 255, 0.032);
       border-radius: 16px;
       padding: 12px 14px;
-      font-size: 13.5px;
-      color: var(--text-muted);
-      line-height: 1.6;
-      border: 1px solid #ffe0ea;
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.65;
+      border: 1px solid var(--border);
       text-align: center;
       font-variant-numeric: tabular-nums;
     }
 
     .totals-box strong {
-      color: var(--pink-dark);
+      color: #ffb8d0;
     }
 
-    /* Страница 2 — Послания и круглые открытки */
+    .weather-pill {
+      margin-top: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #f3e6ef;
+      background: rgba(255, 255, 255, 0.038);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 15px;
+      padding: 10px 12px;
+    }
+
     .card-round-wrap {
       display: flex;
       justify-content: center;
-      margin: 10px 0 12px;
+      margin: 12px 0 14px;
     }
 
     canvas.round-postcard {
       width: 240px;
       height: 240px;
       border-radius: 50%;
-      background: #140910;
-      box-shadow: 0 12px 30px rgba(212, 42, 88, 0.20), 0 0 0 4px #ffd6e5;
+      background: #09060c;
+      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.55), 0 0 0 2px rgba(255, 133, 171, 0.35), 0 0 28px rgba(255, 61, 119, 0.22);
       display: block;
     }
 
     @keyframes pageFadeSlide {
-      from { opacity: 0; transform: translateY(8px) scale(0.985); }
-      to   { opacity: 1; transform: translateY(0) scale(1); }
+      from { opacity: 0; filter: blur(6px); transform: translateY(8px) scale(0.985); }
+      to { opacity: 1; filter: blur(0); transform: translateY(0) scale(1); }
     }
 
     .page-anim {
-      animation: pageFadeSlide 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+      animation: pageFadeSlide 0.32s cubic-bezier(0.22, 1, 0.36, 1);
     }
 
     .msg-bubble {
-      background: linear-gradient(180deg, #fff8fa 0%, #ffeff4 100%);
-      border: 1.5px solid #ffd1e0;
-      border-radius: 20px;
-      padding: 18px 16px;
-      font-size: 17px;
+      background: rgba(255, 255, 255, 0.042);
+      border: 1px solid rgba(255, 133, 171, 0.24);
+      border-radius: 18px;
+      padding: 16px 15px;
+      font-size: 16px;
       font-weight: 600;
       line-height: 1.5;
-      color: var(--text-main);
+      color: var(--text);
       text-align: center;
       white-space: pre-wrap;
       word-break: break-word;
-      margin: 8px 0 10px;
+      margin: 8px 0 8px;
     }
 
     .msg-meta {
       text-align: center;
-      font-size: 12.5px;
-      color: var(--text-muted);
-      margin-bottom: 16px;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 14px;
     }
 
     .history-list {
       margin-top: 16px;
       padding-top: 14px;
-      border-top: 1px solid #f5dce5;
+      border-top: 1px solid var(--border);
       display: flex;
       flex-direction: column;
       gap: 8px;
     }
 
     .history-item {
-      background: rgba(255, 248, 250, 0.8);
-      border: 1px solid #f6dfe7;
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid var(--border);
       border-radius: 14px;
       padding: 10px 12px;
       font-size: 13.5px;
       line-height: 1.45;
-      color: var(--text-main);
+      color: var(--text);
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .history-item:hover {
+      border-color: rgba(255, 133, 171, 0.38);
+      background: rgba(255, 61, 119, 0.07);
     }
 
     .history-time {
       display: block;
       font-size: 11.5px;
-      color: var(--text-muted);
+      color: var(--muted);
       margin-top: 3px;
     }
 
+    /* React Bits: Specular Button */
     .btn {
+      position: relative;
       width: 100%;
       border: none;
       border-radius: 16px;
-      padding: 14px 18px;
-      font-size: 15px;
+      padding: 13px 18px;
+      font-size: 14.5px;
       font-weight: 700;
       cursor: pointer;
-      transition: transform 0.14s ease, box-shadow 0.2s ease, opacity 0.2s;
+      overflow: hidden;
+      transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s, opacity 0.2s;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
+      --bx: 50%;
+      --by: 50%;
+    }
+
+    .btn::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(120px circle at var(--bx) var(--by), rgba(255, 255, 255, 0.26), transparent 65%);
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+    }
+
+    .btn:hover::after {
+      opacity: 1;
     }
 
     .btn:active {
@@ -381,31 +549,33 @@
     }
 
     .btn-primary {
-      background: linear-gradient(135deg, #f04372 0%, #d92657 100%);
+      background: linear-gradient(135deg, #ff3d77 0%, #c82257 100%);
       color: #fff;
-      box-shadow: 0 8px 20px rgba(217, 38, 87, 0.26);
+      border: 1px solid rgba(255, 165, 195, 0.42);
+      box-shadow: 0 8px 24px rgba(255, 61, 119, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.30);
     }
 
     .btn-soft {
-      background: #fff0f5;
-      color: var(--pink-dark);
-      border: 1px solid #ffcadd;
+      background: rgba(255, 255, 255, 0.055);
+      color: #ffd9e6;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
     }
 
     .btn:disabled {
-      opacity: 0.65;
+      opacity: 0.6;
       cursor: wait;
     }
 
     .steps {
-      background: #fff8fa;
+      background: rgba(255, 255, 255, 0.032);
       border-radius: 16px;
       padding: 12px 14px;
       margin-bottom: 16px;
-      border: 1px solid #ffe0ea;
-      font-size: 13.5px;
-      line-height: 1.5;
-      color: var(--text-main);
+      border: 1px solid var(--border);
+      font-size: 13px;
+      line-height: 1.55;
+      color: #e4d8e6;
     }
 
     .steps div + div {
@@ -417,28 +587,29 @@
       width: 20px;
       height: 20px;
       border-radius: 50%;
-      background: var(--pink-main);
-      color: #fff;
-      font-size: 12px;
+      background: rgba(255, 61, 119, 0.22);
+      border: 1px solid rgba(255, 133, 171, 0.45);
+      color: #ffd0e0;
+      font-size: 11.5px;
       font-weight: 700;
       align-items: center;
       justify-content: center;
-      margin-right: 6px;
+      margin-right: 7px;
     }
 
     .field-label {
       display: block;
-      font-size: 13px;
+      font-size: 12.5px;
       font-weight: 700;
       margin-bottom: 6px;
-      color: var(--text-main);
+      color: #e4d8e6;
     }
 
     .net-list {
       display: flex;
       flex-direction: column;
       gap: 7px;
-      max-height: 195px;
+      max-height: 190px;
       overflow-y: auto;
       margin-bottom: 12px;
     }
@@ -448,19 +619,20 @@
       align-items: center;
       justify-content: space-between;
       padding: 11px 14px;
-      background: #fff;
-      border: 1.5px solid #f2dbe3;
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid var(--border);
       border-radius: 14px;
       cursor: pointer;
-      font-size: 14px;
+      font-size: 13.5px;
       font-weight: 600;
+      color: var(--text);
       transition: border-color 0.15s, background 0.15s;
     }
 
     .net-item.selected {
-      border-color: var(--pink-main);
-      background: #fff2f6;
-      color: var(--pink-dark);
+      border-color: var(--pink);
+      background: rgba(255, 61, 119, 0.14);
+      color: #ffffff;
     }
 
     .input-wrap {
@@ -468,20 +640,34 @@
       margin-bottom: 14px;
     }
 
-    .input {
+    .input, .select {
       width: 100%;
-      padding: 13px 44px 13px 14px;
+      padding: 12px 14px;
       border-radius: 14px;
-      border: 1.5px solid #edd0db;
-      background: #fff;
-      font-size: 15px;
-      color: var(--text-main);
+      border: 1px solid var(--border);
+      background: rgba(0, 0, 0, 0.34);
+      font-size: 14.5px;
+      color: var(--text);
       outline: none;
-      transition: border-color 0.2s;
+      transition: border-color 0.2s, box-shadow 0.2s;
     }
 
-    .input:focus {
-      border-color: var(--pink-main);
+    .input-wrap .input {
+      padding-right: 44px;
+    }
+
+    .input:focus, .select:focus {
+      border-color: rgba(255, 85, 145, 0.72);
+      box-shadow: 0 0 0 3px rgba(255, 61, 119, 0.16);
+    }
+
+    .select {
+      margin-bottom: 14px;
+    }
+
+    .select option {
+      background: #140f1c;
+      color: #fff;
     }
 
     .eye-btn {
@@ -491,55 +677,43 @@
       transform: translateY(-50%);
       border: none;
       background: none;
-      font-size: 18px;
+      font-size: 17px;
       cursor: pointer;
       padding: 4px;
     }
 
-    .select {
-      width: 100%;
-      padding: 12px 14px;
-      border-radius: 14px;
-      border: 1.5px solid #edd0db;
-      background: #fff;
-      font-size: 14.5px;
-      color: var(--text-main);
-      margin-bottom: 14px;
-      outline: none;
-    }
-
     .alert {
       margin-top: 12px;
-      padding: 12px 14px;
+      padding: 11px 13px;
       border-radius: 14px;
-      font-size: 13.5px;
+      font-size: 13px;
       line-height: 1.45;
       display: none;
     }
 
     .alert.ok {
       display: block;
-      background: var(--ok-bg);
-      color: var(--ok-text);
-      border: 1px solid #abefc6;
+      background: rgba(52, 211, 153, 0.12);
+      color: #a7f3d0;
+      border: 1px solid rgba(52, 211, 153, 0.35);
     }
 
     .alert.err {
       display: block;
-      background: #fff1f2;
-      color: #be123c;
-      border: 1px solid #fecdd3;
+      background: rgba(251, 113, 133, 0.13);
+      color: #fecdd3;
+      border: 1px solid rgba(251, 113, 133, 0.38);
     }
 
     .ip-chip {
       display: inline-block;
       margin-top: 8px;
-      padding: 7px 13px;
-      background: #fff;
+      padding: 6px 12px;
+      background: rgba(255, 255, 255, 0.08);
       border-radius: 10px;
-      font-weight: 800;
-      color: var(--pink-dark);
-      border: 1px solid #ffc2d4;
+      font-weight: 700;
+      color: #ffd0e0;
+      border: 1px solid rgba(255, 133, 171, 0.35);
       text-decoration: none;
     }
 
@@ -551,12 +725,41 @@
     .link-btn {
       background: none;
       border: none;
-      color: var(--text-muted);
-      font-size: 13.5px;
+      color: var(--muted);
+      font-size: 13px;
       font-weight: 600;
-      text-decoration: underline;
       cursor: pointer;
-      padding: 8px;
+      padding: 8px 12px;
+      border-radius: 10px;
+      transition: color 0.15s, background 0.15s;
+    }
+
+    .link-btn:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .divider {
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    .spark {
+      position: fixed;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 99;
+      background: #ff85ab;
+      box-shadow: 0 0 8px #ff3d77;
+      animation: sparkOut 0.48s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes sparkOut {
+      from { transform: translate(0, 0) scale(1); opacity: 1; }
+      to { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
     }
 
     .hidden {
@@ -565,7 +768,11 @@
   </style>
 </head>
 <body>
-  <div class="bg-hearts" id="bgHearts"></div>
+  <div class="aurora-bg">
+    <div class="aurora-band aurora-1"></div>
+    <div class="aurora-band aurora-2"></div>
+  </div>
+  <div class="dot-field"></div>
 
   <div class="container">
     <div class="header">
@@ -582,8 +789,8 @@
       </div>
     </div>
 
-    <!-- НАВИГАЦИЯ ПО 2 СТРАНИЦАМ -->
-    <div class="tabs" id="mainTabs">
+    <div class="tabs" id="mainTabs" data-active="1">
+      <div class="tab-slider"></div>
       <button type="button" class="tab-btn active" id="tabBtn1" onclick="switchPage(1)">
         ⏱ Наше время
       </button>
@@ -592,7 +799,6 @@
       </button>
     </div>
 
-    <!-- БЛОК НАСТРОЙКИ WI-FI -->
     <div class="card hidden" id="setupCard">
       <div class="card-title" id="setupTitle">Подключение к домашнему Wi-Fi</div>
       <div class="card-desc" id="setupDesc">
@@ -607,11 +813,11 @@
 
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
         <span class="field-label" style="margin:0;">Доступные сети:</span>
-        <button type="button" class="link-btn" style="padding:2px 4px; font-size:12.5px;" onclick="scanNetworks(true)">🔄 Обновить</button>
+        <button type="button" class="link-btn" style="padding:2px 6px; font-size:12px;" onclick="scanNetworks(true)">🔄 Обновить</button>
       </div>
 
       <div class="net-list" id="netList">
-        <div style="text-align:center; padding:14px; color:#87586a; font-size:13.5px;">Поиск сетей Wi-Fi...</div>
+        <div style="text-align:center; padding:14px; color:var(--muted); font-size:13px;">Поиск сетей Wi-Fi...</div>
       </div>
 
       <label class="field-label" for="ssidInput">Название сети (Wi-Fi):</label>
@@ -645,8 +851,8 @@
 
       <div class="alert" id="wifiAlert"></div>
 
-      <div id="otaBox" class="hidden" style="margin-top:18px; padding-top:16px; border-top:1px solid #f2dbe3; text-align:center;">
-        <div style="text-align:left; margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid #f2dbe3;">
+      <div id="otaBox" class="hidden divider" style="text-align:center;">
+        <div style="text-align:left; margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid var(--border);">
           <label class="field-label" for="weatherCityInput">🌤 Город для 4-й страницы погоды:</label>
           <div style="display:flex; gap:8px;">
             <input class="input" id="weatherCityInput" type="text" value="Москва" placeholder="Например: Казань" style="padding:10px 12px;">
@@ -657,8 +863,8 @@
           <div class="alert" id="cityAlert"></div>
         </div>
 
-        <div style="font-size:13px; color:var(--text-muted); margin-bottom:10px;">
-          Версия системы: <strong id="fwVerText">v1.3.8</strong> (автообновление включено)
+        <div style="font-size:13px; color:var(--muted); margin-bottom:10px;">
+          Версия системы: <strong id="fwVerText" style="color:#fff;">v1.3.8</strong> (автообновление включено)
         </div>
         <button type="button" class="btn btn-soft" id="otaCheckBtn" onclick="triggerOtaCheck()">
           🔄 Проверить обновление с GitHub
@@ -667,7 +873,6 @@
       </div>
     </div>
 
-    <!-- СТРАНИЦА 1: ТАЙМЕР ОТНОШЕНИЙ -->
     <div class="card timer-center page-anim" id="page1Card">
       <div class="since-pill">Мы вместе с 21 октября 2026</div>
 
@@ -695,18 +900,17 @@
         Считаем время...
       </div>
 
-      <div id="weatherMiniPill" style="margin-top:10px; font-size:13px; font-weight:600; color:var(--pink-dark); background:#fff4f8; border:1px solid #ffd8e6; border-radius:14px; padding:8px 12px;">
-        🌤 Погода: <span id="weatherMiniText">—</span> • <span id="weatherMoodText" style="color:#0f8f4e;">Гулябельно ❤️</span>
+      <div class="weather-pill" id="weatherMiniPill">
+        🌤 Погода: <span id="weatherMiniText">—</span> • <span id="weatherMoodText" style="color:var(--ok);">Гулябельно ❤️</span>
       </div>
 
       <div style="margin-top: 16px;">
-        <button type="button" class="btn btn-soft" id="pulseBtn" onclick="sendLovePulse()">
+        <button type="button" class="btn btn-soft" id="pulseBtn" onclick="sendLovePulse(false, event)">
           ❤️ Послать сердечко в ответ
         </button>
       </div>
     </div>
 
-    <!-- СТРАНИЦА 2: ВХОДЯЩИЕ ПОСЛАНИЯ И КРУГЛЫЕ ОТКРЫТКИ -->
     <div class="card hidden page-anim" id="page2Card">
       <div class="card-title">Послание для тебя</div>
 
@@ -717,26 +921,26 @@
       <div class="msg-bubble" id="latestMsgText">—</div>
       <div class="msg-meta" id="latestMsgTime">—</div>
 
-      <button type="button" class="btn btn-primary" id="replyHeartBtn" onclick="sendLovePulse(true)">
+      <button type="button" class="btn btn-primary" id="replyHeartBtn" onclick="sendLovePulse(true, event)">
         ❤️ Отправить сердечко в ответ
       </button>
 
-      <div style="margin-top:16px; padding-top:14px; border-top:1px solid #f5dce5;">
+      <div class="divider">
         <div class="field-label">💬 Сообщение для 3-й страницы:</div>
-        <div class="msg-bubble" id="plainMsgText" style="min-height:54px; padding:12px 14px; margin-bottom:6px; font-size:15px;">—</div>
+        <div class="msg-bubble" id="plainMsgText" style="padding:12px 14px; margin-bottom:6px; font-size:14.5px;">—</div>
         <div class="msg-meta" id="plainMsgTime" style="margin-bottom:10px;">—</div>
         <div class="input-wrap" style="margin-bottom:8px;">
           <input class="input" id="plainInput" type="text" maxlength="280" placeholder="Напиши текст для 3-й страницы..." style="padding-right:14px;">
         </div>
-        <button type="button" class="btn btn-soft" id="sendPlainSiteBtn" onclick="sendPlainToStation()">
+        <button type="button" class="btn btn-soft" id="sendPlainSiteBtn" onclick="sendPlainToStation(event)">
           ✉️ Отправить текст на 3-ю страницу
         </button>
         <div class="alert" id="plainSiteAlert"></div>
       </div>
 
       <div class="history-list hidden" id="historyWrap">
-        <div style="font-size:12.5px; font-weight:700; color:var(--text-muted); margin-bottom:2px;">
-          Предыдущие сообщения:
+        <div style="font-size:12.5px; font-weight:700; color:var(--muted); margin-bottom:2px;">
+          Предыдущие открытки и послания:
         </div>
         <div id="historyItems"></div>
       </div>
@@ -755,6 +959,44 @@
     let selectedCardIdx = 0;
     let lastCardSig = '';
 
+    // React Bits interactive Border Glow & Specular Button pointer tracking
+    document.addEventListener('pointermove', (e) => {
+      document.querySelectorAll('.card').forEach(c => {
+        if (c.classList.contains('hidden')) return;
+        const r = c.getBoundingClientRect();
+        const x = e.clientX - r.left;
+        const y = e.clientY - r.top;
+        c.style.setProperty('--mx', x + 'px');
+        c.style.setProperty('--my', y + 'px');
+        const near = x > -60 && y > -60 && x < r.width + 60 && y < r.height + 60;
+        c.style.setProperty('--glow-o', near ? '1' : '0');
+      });
+      if (e.target && e.target.closest) {
+        const b = e.target.closest('.btn');
+        if (b) {
+          const br = b.getBoundingClientRect();
+          b.style.setProperty('--bx', (e.clientX - br.left) + 'px');
+          b.style.setProperty('--by', (e.clientY - br.top) + 'px');
+        }
+      }
+    }, { passive: true });
+
+    function spawnClickSparks(ev) {
+      if (!ev || !ev.clientX) return;
+      for (let i = 0; i < 8; i++) {
+        const sp = document.createElement('span');
+        sp.className = 'spark';
+        const ang = (Math.PI * 2 * i) / 8 + (Math.random() - 0.5) * 0.3;
+        const dist = 22 + Math.random() * 20;
+        sp.style.left = ev.clientX + 'px';
+        sp.style.top = ev.clientY + 'px';
+        sp.style.setProperty('--tx', Math.cos(ang) * dist + 'px');
+        sp.style.setProperty('--ty', Math.sin(ang) * dist + 'px');
+        document.body.appendChild(sp);
+        setTimeout(() => sp.remove(), 500);
+      }
+    }
+
     function plural(n, one, two, five) {
       n = Math.abs(n) % 100;
       let n1 = n % 10;
@@ -770,6 +1012,7 @@
 
     function switchPage(pageNum) {
       activePage = pageNum;
+      document.getElementById('mainTabs').setAttribute('data-active', String(pageNum));
       document.getElementById('tabBtn1').classList.toggle('active', pageNum === 1);
       document.getElementById('tabBtn2').classList.toggle('active', pageNum === 2);
       const p1 = document.getElementById('page1Card');
@@ -820,21 +1063,6 @@
         `или <strong>${diff.toLocaleString('ru-RU')}</strong> ${plural(diff, 'секунда', 'секунды', 'секунд')}`;
     }
 
-    function spawnBgHearts() {
-      const wrap = document.getElementById('bgHearts');
-      const symbols = ['❤', '♥'];
-      for (let i = 0; i < 10; i++) {
-        const el = document.createElement('div');
-        el.className = 'bg-heart';
-        el.textContent = symbols[i % symbols.length];
-        el.style.left = (Math.random() * 94 + 2) + '%';
-        el.style.fontSize = (14 + Math.random() * 14) + 'px';
-        el.style.animationDuration = (11 + Math.random() * 10) + 's';
-        el.style.animationDelay = (-Math.random() * 16) + 's';
-        wrap.appendChild(el);
-      }
-    }
-
     function togglePass() {
       const inp = document.getElementById('passInput');
       inp.type = inp.type === 'password' ? 'text' : 'password';
@@ -880,12 +1108,12 @@
         const end = offset + stripLens[s];
         const index = new Uint16Array(64);
         let prev = 0;
-        let p = offset;
         let stripLeft = 240 * 16;
+        let p = offset;
 
-        while (stripLeft > 0) {
-          let b1 = p < end ? u8[p++] : 0x40;
-          if (b1 === 0xFE) {
+        while (p < end && stripLeft > 0) {
+          const b1 = u8[p++];
+          if (b1 === 0xFE && p + 1 < end) {
             prev = ((u8[p] << 8) | u8[p + 1]) & 0xFFFF;
             p += 2;
           } else if ((b1 & 0xC0) === 0x40) {
@@ -1048,7 +1276,7 @@
 
     async function scanNetworks(forceRefresh) {
       const list = document.getElementById('netList');
-      list.innerHTML = '<div style="text-align:center; padding:14px; color:#87586a; font-size:13.5px;">Поиск сетей Wi-Fi...</div>';
+      list.innerHTML = '<div style="text-align:center; padding:14px; color:var(--muted); font-size:13px;">Поиск сетей Wi-Fi...</div>';
       try {
         const url = forceRefresh ? '/api/scan?refresh=1' : '/api/scan';
         for (let attempt = 0; attempt < 6; attempt++) {
@@ -1060,7 +1288,7 @@
           }
           const nets = Array.isArray(payload) ? payload : (payload.networks || []);
           if (nets.length === 0) {
-            list.innerHTML = '<div style="text-align:center; padding:14px; color:#87586a; font-size:13.5px;">Сети не найдены — введи название ниже вручную</div>';
+            list.innerHTML = '<div style="text-align:center; padding:14px; color:var(--muted); font-size:13px;">Сети не найдены — введи название ниже вручную</div>';
             return;
           }
           list.innerHTML = '';
@@ -1068,7 +1296,7 @@
             const row = document.createElement('div');
             row.className = 'net-item';
             const bars = net.rssi > -60 ? 'Отличный сигнал' : (net.rssi > -75 ? 'Хороший сигнал' : 'Слабый сигнал');
-            row.innerHTML = `<span>${escapeHtml(net.ssid)} ${net.open ? '' : '🔒'}</span><span style="font-size:12px; color:#87586a;">${bars}</span>`;
+            row.innerHTML = `<span>${escapeHtml(net.ssid)} ${net.open ? '' : '🔒'}</span><span style="font-size:12px; color:var(--muted);">${bars}</span>`;
             row.onclick = () => {
               document.querySelectorAll('.net-item').forEach(el => el.classList.remove('selected'));
               row.classList.add('selected');
@@ -1079,9 +1307,9 @@
           });
           return;
         }
-        list.innerHTML = '<div style="text-align:center; padding:14px; color:#87586a; font-size:13.5px;">Введи название сети вручную ниже</div>';
+        list.innerHTML = '<div style="text-align:center; padding:14px; color:var(--muted); font-size:13px;">Введи название сети вручную ниже</div>';
       } catch (e) {
-        list.innerHTML = '<div style="text-align:center; padding:14px; color:#87586a; font-size:13.5px;">Можно ввести название сети вручную ниже</div>';
+        list.innerHTML = '<div style="text-align:center; padding:14px; color:var(--muted); font-size:13px;">Можно ввести название сети вручную ниже</div>';
       }
     }
 
@@ -1148,7 +1376,8 @@
       }
     }
 
-    async function sendPlainToStation() {
+    async function sendPlainToStation(ev) {
+      spawnClickSparks(ev);
       const inp = document.getElementById('plainInput');
       const btn = document.getElementById('sendPlainSiteBtn');
       const alertBox = document.getElementById('plainSiteAlert');
@@ -1179,7 +1408,8 @@
       }
     }
 
-    async function sendLovePulse(fromMessagesPage) {
+    async function sendLovePulse(fromMessagesPage, ev) {
+      spawnClickSparks(ev);
       const btn = document.getElementById(fromMessagesPage ? 'replyHeartBtn' : 'pulseBtn');
       const oldText = btn.textContent;
       btn.textContent = 'Сердечко отправлено ✓';
@@ -1315,7 +1545,6 @@
       }
     }
 
-    spawnBgHearts();
     updateLoveTimer();
     setInterval(updateLoveTimer, 1000);
     setInterval(loadMessages, 5000);
