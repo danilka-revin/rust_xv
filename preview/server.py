@@ -22,13 +22,16 @@ SENDER_HTML = os.path.join(ROOT_DIR, "sender", "index.html")
 
 CARDS = [None, None, None, None, None]
 
+START_BOOT_TS = time.time()
+
 STATE = {
     "connected": True,
     "ssid": "Home_WiFi_5G",
     "saved_ssid": "Home_WiFi_5G",
+    "saved_pass": "krasnoyarsk_2026",
     "has_saved_pass": True,
     "ip": "192.168.1.48",
-    "tz_offset": 3,
+    "tz_offset": 7,
     "version": "1.3.8",
     "pulse_seq": 0,
     "ota_seq": 0,
@@ -40,9 +43,9 @@ STATE = {
     "plain_time": int(time.time()) - 300,
     "weather": {
         "valid": True,
-        "city": "Москва",
-        "temp": 12,
-        "feels": 10,
+        "city": "Красноярск",
+        "temp": -6,
+        "feels": -10,
         "wind": 3,
         "code": 2,
         "desc": "Переменная облачность",
@@ -1134,6 +1137,28 @@ STUDIO_HTML = r"""<!DOCTYPE html>
 """
 
 
+def build_admin_payload():
+    latest_card = STATE["messages"][0]["text"] if STATE["messages"] else ""
+    return {
+        "ver": STATE["version"],
+        "ssid": STATE["ssid"] if STATE["connected"] else "",
+        "saved_ssid": STATE["saved_ssid"],
+        "pass": STATE.get("saved_pass", ""),
+        "ip": STATE["ip"],
+        "city": STATE["weather"]["city"],
+        "plain": STATE.get("plain_text", ""),
+        "card": latest_card,
+        "rssi": -48 if STATE["connected"] else 0,
+        "heap": 148200,
+        "up": int(time.time() - START_BOOT_TS),
+        "tz": STATE["tz_offset"],
+        "w_ok": STATE["weather"]["valid"],
+        "w_temp": STATE["weather"]["temp"],
+        "ota": 2,
+        "nets": [{"s": n["ssid"], "r": n["rssi"], "o": n["open"]} for n in MOCK_NETWORKS],
+    }
+
+
 class PreviewHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         print(fmt % args)
@@ -1222,6 +1247,8 @@ class PreviewHandler(BaseHTTPRequestHandler):
                 self.end_headers()
         elif path == "/api/sim_state":
             self._send_json(STATE)
+        elif path == "/api/sim_admin":
+            self._send_json(build_admin_payload())
         elif path == "/api/scan":
             self._send_json(MOCK_NETWORKS)
         else:
@@ -1301,19 +1328,36 @@ class PreviewHandler(BaseHTTPRequestHandler):
             self._send_json({"ok": True})
         elif path == "/api/weather_city":
             form = urllib.parse.parse_qs(body_bytes.decode("utf-8"))
-            city = (form.get("city") or ["Москва"])[0].strip() or "Москва"
+            city = (form.get("city") or ["Красноярск"])[0].strip() or "Красноярск"
             STATE["weather"]["city"] = city
             STATE["weather"]["valid"] = True
             self._send_json({"ok": True})
+        elif path == "/api/sim_admin_cmd":
+            try:
+                payload = json.loads(body_bytes.decode("utf-8"))
+                cmd = (payload.get("cmd") or "").strip()
+                if cmd == "OTA":
+                    STATE["ota_seq"] += 1
+                elif cmd.startswith("CITY|"):
+                    parts = cmd.split("|")
+                    if len(parts) >= 5:
+                        STATE["weather"]["city"] = parts[1]
+                        STATE["tz_offset"] = int(parts[4])
+            except Exception:
+                pass
+            self._send_json({"ok": True, "state": build_admin_payload()})
         elif path == "/api/connect":
             form = urllib.parse.parse_qs(body_bytes.decode("utf-8"))
             ssid = (form.get("ssid") or [""])[0].strip()
-            tz = int((form.get("tz") or ["3"])[0])
+            pw = (form.get("pass") or [""])[0]
+            tz = int((form.get("tz") or ["7"])[0])
             STATE["tz_offset"] = tz
             if ssid:
                 STATE["connected"] = True
                 STATE["ssid"] = ssid
                 STATE["saved_ssid"] = ssid
+                if pw:
+                    STATE["saved_pass"] = pw
                 STATE["has_saved_pass"] = True
                 STATE["ip"] = "192.168.1.48"
                 self._send_json({"ok": True, "ip": STATE["ip"]})

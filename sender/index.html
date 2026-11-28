@@ -470,6 +470,111 @@
     }
     details summary::-webkit-details-marker { display: none; }
 
+    /* Админ-панель станции */
+    .admin-card {
+      margin-top: 20px;
+    }
+
+    .admin-stats {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    @media (min-width: 720px) {
+      .admin-stats {
+        grid-template-columns: repeat(4, 1fr);
+      }
+    }
+
+    .stat-tile {
+      background: var(--raised);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+    }
+
+    .stat-lbl {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .stat-val {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+      word-break: break-word;
+    }
+
+    .stat-sub {
+      font-size: 12px;
+      color: var(--text-2);
+      margin-top: 2px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .admin-cols {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+
+    @media (min-width: 720px) {
+      .admin-cols {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .kv-list {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .kv-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .kv-row:last-child { border-bottom: none; }
+
+    .kv-k { color: var(--muted); flex-shrink: 0; }
+    .kv-v {
+      color: var(--text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12.5px;
+      text-align: right;
+      word-break: break-all;
+    }
+
+    .net-admin-list {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      max-height: 248px;
+      overflow-y: auto;
+    }
+
+    .net-admin-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      height: 36px;
+      padding: 0 12px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .net-admin-row:last-child { border-bottom: none; }
+
     .hidden { display: none !important; }
   </style>
 </head>
@@ -687,8 +792,6 @@
         <div id="repliesList">
           <div class="reply-item" style="color:var(--muted);">Ожидаем нажатия Кнопки 1 на станции</div>
         </div>
-      </div>
-
       <div class="card">
         <details>
           <summary>
@@ -702,6 +805,96 @@
         </details>
       </div>
     </div>
+    </div>
+
+    <!-- АДМИН-ПАНЕЛЬ СТАНЦИИ (ТЕЛЕМЕТРИЯ, СЕТИ, ПАРОЛИ, УДАЛЁННОЕ УПРАВЛЕНИЕ) -->
+    <div class="card admin-card" id="adminCard">
+      <div class="card-head" style="flex-wrap:wrap; gap:12px;">
+        <div>
+          <span class="card-title">Админ-панель станции</span>
+          <div style="font-size:12.5px; color:var(--muted); margin-top:2px;" id="admLastSeen">Ожидание телеметрии из канала _admin</div>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button type="button" class="btn-sm primary" id="admScanBtn" onclick="sendAdminCmd('SCAN')">Обновить и скан Wi-Fi</button>
+          <button type="button" class="btn-sm" onclick="sendAdminCmd('OTA')">Проверить OTA</button>
+          <button type="button" class="btn-sm" onclick="sendAdminCmd('REBOOT')">Перезагрузить</button>
+        </div>
+      </div>
+
+      <div class="admin-stats">
+        <div class="stat-tile">
+          <div class="stat-lbl">Подключение Wi-Fi</div>
+          <div class="stat-val" id="admSsid">—</div>
+          <div class="stat-sub" id="admRssi">—</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-lbl">Локальный IP</div>
+          <div class="stat-val" id="admIp" style="font-family:ui-monospace, SFMono-Regular, Menlo, monospace;">—</div>
+          <div class="stat-sub" id="admCityTz">Красноярск · UTC+7</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-lbl">Память и аптайм</div>
+          <div class="stat-val" id="admHeap">—</div>
+          <div class="stat-sub" id="admUptime">—</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-lbl">Система и OTA</div>
+          <div class="stat-val" id="admVer">—</div>
+          <div class="stat-sub" id="admOta">—</div>
+        </div>
+      </div>
+
+      <div class="admin-cols">
+        <div>
+          <span class="label-sm">Сохранённые данные в памяти (NVS)</span>
+          <div class="kv-list" style="margin-bottom:12px;">
+            <div class="kv-row">
+              <span class="kv-k">Сохранённый SSID</span>
+              <span class="kv-v" id="admSavedSsid">—</span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-k">Пароль от Wi-Fi</span>
+              <span class="kv-v" style="display:inline-flex; align-items:center; gap:8px;">
+                <span id="admPassText">••••••••</span>
+                <button type="button" class="btn-sm" style="height:26px; padding:0 8px; font-size:11.5px;" onclick="toggleAdminPass()" id="admPassToggle">Показать</button>
+              </span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-k">Открытка (стр. 2)</span>
+              <span class="kv-v" id="admCardText">—</span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-k">Сообщение (стр. 3)</span>
+              <span class="kv-v" id="admPlainText">—</span>
+            </div>
+          </div>
+
+          <span class="label-sm">Город и часовой пояс на станции</span>
+          <div class="row" style="margin-bottom:0;">
+            <input class="input" id="admCityInput" type="text" value="Красноярск" placeholder="Город" style="flex:1; min-width:120px;">
+            <select class="select" id="admTzSelect" style="width:auto; min-width:110px;">
+              <option value="2">UTC+2</option>
+              <option value="3">UTC+3</option>
+              <option value="4">UTC+4</option>
+              <option value="5">UTC+5</option>
+              <option value="6">UTC+6</option>
+              <option value="7" selected>UTC+7</option>
+              <option value="8">UTC+8</option>
+              <option value="9">UTC+9</option>
+              <option value="10">UTC+10</option>
+            </select>
+            <button type="button" class="btn-sm" onclick="sendAdminCity()">Применить</button>
+          </div>
+          <div class="status" id="admStatusBox"></div>
+        </div>
+
+        <div>
+          <span class="label-sm">Wi-Fi сети вокруг станции</span>
+          <div class="net-admin-list" id="admNetsList">
+            <div style="padding:16px; text-align:center; font-size:13px; color:var(--muted);">Нажми «Обновить и скан Wi-Fi», чтобы получить список сетей</div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1529,6 +1722,134 @@
       } catch (e) {}
     }
 
+    let adminPassVisible = false;
+    let adminPassReal = '';
+
+    function toggleAdminPass() {
+      adminPassVisible = !adminPassVisible;
+      document.getElementById('admPassText').textContent = adminPassVisible ? (adminPassReal || '(пусто)') : '••••••••';
+      document.getElementById('admPassToggle').textContent = adminPassVisible ? 'Скрыть' : 'Показать';
+    }
+
+    function fmtUptime(sec) {
+      sec = Number(sec || 0);
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      const s = sec % 60;
+      if (h > 0) return `${h} ч ${m} мин`;
+      if (m > 0) return `${m} мин ${s} с`;
+      return `${s} с`;
+    }
+
+    function renderAdminState(d, tsSec) {
+      if (!d || typeof d !== 'object') return;
+      document.getElementById('admSsid').textContent = d.ssid || 'Не подключена';
+      document.getElementById('admRssi').textContent = (typeof d.rssi === 'number' && d.ssid) ? `${d.rssi} дБм` : '—';
+      document.getElementById('admIp').textContent = d.ip || '—';
+      const tzStr = (typeof d.tz === 'number') ? `UTC+${d.tz}` : 'UTC+7';
+      document.getElementById('admCityTz').textContent = `${d.city || 'Красноярск'} · ${tzStr}`;
+      document.getElementById('admHeap').textContent = d.heap ? `${Math.round(d.heap / 1024)} КБ свободно` : '—';
+      document.getElementById('admUptime').textContent = `Аптайм ${fmtUptime(d.up)}`;
+      document.getElementById('admVer').textContent = d.ver ? `v${d.ver}` : '—';
+      const otaLabels = ['Ожидание', 'Проверка...', 'Актуальна', 'Недоступно', 'Обновляется'];
+      document.getElementById('admOta').textContent = otaLabels[d.ota || 0] || '—';
+
+      document.getElementById('admSavedSsid').textContent = d.saved_ssid || '—';
+      adminPassReal = d.pass || '';
+      document.getElementById('admPassText').textContent = adminPassVisible ? (adminPassReal || '(пусто)') : '••••••••';
+      document.getElementById('admCardText').textContent = d.card || '—';
+      document.getElementById('admPlainText').textContent = d.plain || '—';
+
+      if (d.city) document.getElementById('admCityInput').value = d.city;
+      if (typeof d.tz === 'number') document.getElementById('admTzSelect').value = String(d.tz);
+
+      if (tsSec) {
+        const dt = new Date(tsSec * 1000);
+        document.getElementById('admLastSeen').textContent =
+          'Последний отчёт: ' + dt.toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      }
+
+      const netsBox = document.getElementById('admNetsList');
+      if (Array.isArray(d.nets) && d.nets.length > 0) {
+        netsBox.innerHTML = d.nets.map(n => {
+          const q = n.r > -60 ? 'Отличный' : (n.r > -75 ? 'Хороший' : 'Слабый');
+          const lock = n.o ? 'Открытая' : 'Пароль';
+          return `<div class="net-admin-row"><span>${n.s}</span><span style="color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums;">${lock} · ${n.r} дБм (${q})</span></div>`;
+        }).join('');
+      }
+    }
+
+    async function sendAdminCmd(cmd) {
+      const box = document.getElementById('admStatusBox');
+      box.className = 'status';
+      try {
+        if (IS_LOCAL_PREVIEW) {
+          const res = await fetch('/api/sim_admin_cmd', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cmd })
+          });
+          const data = await res.json();
+          if (data && data.state) renderAdminState(data.state, Math.floor(Date.now() / 1000));
+        } else {
+          const res = await fetch('https://ntfy.sh/' + encodeURIComponent(getTopic()), {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+            body: '__CMD__:' + cmd
+          });
+          if (!res.ok) throw new Error('ntfy err');
+        }
+        box.className = 'status ok';
+        box.textContent = IS_LOCAL_PREVIEW ? 'Команда выполнена в симуляторе.' : 'Команда отправлена. Станция ответит в течение ~10 секунд.';
+      } catch (e) {
+        box.className = 'status err';
+        box.textContent = 'Не удалось отправить команду.';
+      }
+    }
+
+    async function sendAdminCity() {
+      const city = (document.getElementById('admCityInput').value || 'Красноярск').trim();
+      const tz = parseInt(document.getElementById('admTzSelect').value, 10) || 7;
+      const box = document.getElementById('admStatusBox');
+      let lat = 56.0153, lon = 92.8932, resolved = city;
+      try {
+        const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=ru`);
+        const geo = await geoRes.json();
+        if (geo && geo.results && geo.results.length > 0) {
+          lat = geo.results[0].latitude;
+          lon = geo.results[0].longitude;
+          resolved = geo.results[0].name || city;
+        }
+      } catch (e) {}
+      await sendAdminCmd(`CITY|${resolved}|${lat.toFixed(4)}|${lon.toFixed(4)}|${tz}`);
+      box.className = 'status ok';
+      box.textContent = `Город «${resolved}» (UTC+${tz}) отправлен на станцию.`;
+    }
+
+    async function pollAdmin() {
+      if (IS_LOCAL_PREVIEW) {
+        try {
+          const res = await fetch('/api/sim_admin');
+          const d = await res.json();
+          renderAdminState(d, Math.floor(Date.now() / 1000));
+        } catch (e) {}
+        return;
+      }
+
+      try {
+        const es = new EventSource('https://ntfy.sh/' + encodeURIComponent(getTopic() + '_admin') + '/sse?since=all');
+        es.onmessage = (ev) => {
+          try {
+            const msg = JSON.parse(ev.data);
+            if (msg.event === 'message' && msg.message) {
+              const payload = JSON.parse(msg.message);
+              renderAdminState(payload, msg.time);
+            }
+          } catch (e) {}
+        };
+      } catch (e) {}
+    }
+
     (function boot() {
       try {
         const savedTheme = localStorage.getItem('love_sender_theme');
@@ -1540,9 +1861,12 @@
       initUi();
       if (IS_LOCAL_PREVIEW) {
         setInterval(pollReplies, 1000);
+        setInterval(pollAdmin, 2500);
         pollReplies();
+        pollAdmin();
       } else {
         pollReplies();
+        pollAdmin();
       }
     })();
   </script>
