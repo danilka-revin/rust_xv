@@ -65,6 +65,7 @@
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
       background-color: var(--bg);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Cpath d='M24 27.6l-.55-.5C21.5 25.3 20.2 24.1 20.2 22.7c0-1.15.9-2.05 2.05-2.05.65 0 1.28.3 1.75.78.47-.48 1.1-.78 1.75-.78 1.15 0 2.05.9 2.05 2.05 0 1.4-1.3 2.6-3.25 4.4z' fill='none' stroke='%23c8375a' stroke-opacity='0.09' stroke-width='1.1'/%3E%3C/svg%3E");
       color: var(--text);
       min-height: 100vh;
       padding: 24px 16px 48px;
@@ -95,7 +96,7 @@
     .heart-mark {
       width: 40px;
       height: 40px;
-      border-radius: 10px;
+      border-radius: 12px;
       background: var(--accent-soft);
       border: 1px solid var(--border);
       display: flex;
@@ -103,6 +104,18 @@
       justify-content: center;
       color: var(--accent);
       flex-shrink: 0;
+    }
+
+    .heart-mark svg {
+      animation: softBeat 2.4s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+    }
+
+    @keyframes softBeat {
+      0%, 100% { transform: scale(1); }
+      14% { transform: scale(1.13); }
+      28% { transform: scale(1); }
+      42% { transform: scale(1.08); }
+      58% { transform: scale(1); }
     }
 
     .title {
@@ -255,10 +268,61 @@
     }
 
     .days-hero {
-      padding: 16px 0 20px;
+      padding: 12px 0 20px;
       text-align: center;
       border-bottom: 1px solid var(--border);
       margin-bottom: 16px;
+    }
+
+    .hearts-ornament {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--accent);
+      margin-bottom: 8px;
+      opacity: 0.85;
+    }
+
+    .love-note {
+      margin-top: 12px;
+      font-size: 13px;
+      color: var(--text-2);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+    }
+
+    .heart-divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 20px 0 16px;
+      color: var(--accent);
+      font-size: 12px;
+      opacity: 0.75;
+    }
+    .heart-divider::before, .heart-divider::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .float-heart {
+      position: fixed;
+      pointer-events: none;
+      z-index: 99;
+      color: var(--accent);
+      animation: floatHeartUp 950ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    @keyframes floatHeartUp {
+      0% { opacity: 0.95; transform: translate(0, 0) scale(0.75); }
+      40% { opacity: 0.95; transform: translate(var(--hx), -34px) scale(1.08); }
+      100% { opacity: 0; transform: translate(var(--hx2), -76px) scale(0.85); }
     }
 
     .days-number {
@@ -624,7 +688,7 @@
         </div>
         <div>
           <div class="title">Станция отношений</div>
-          <div class="subtitle">Маленький хранитель нашей любви</div>
+          <div class="subtitle">Маленький хранитель нашей любви ♡</div>
         </div>
       </div>
 
@@ -734,12 +798,19 @@
 
     <div class="card page-enter" id="page1Card">
       <div class="timer-header">
-        <span class="since-label">Вместе с 21 октября 2026</span>
+        <span class="since-label">Вместе с 21 октября 2026 ♡</span>
+        <span class="since-label" style="color:var(--accent-text);">Навсегда</span>
       </div>
 
       <div class="days-hero">
+        <div class="hearts-ornament" aria-hidden="true">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+        </div>
         <div class="days-number" id="daysNum">0</div>
         <div class="days-word" id="daysWord">Дней вместе</div>
+        <div class="love-note" id="cutePhrase">Люблю тебя сегодня и каждый день ♡</div>
       </div>
 
       <div class="time-grid">
@@ -766,14 +837,17 @@
         <span class="weather-mood" id="weatherMoodText">Гулябельно</span>
       </div>
 
-      <button type="button" class="btn btn-accent" id="pulseBtn" onclick="sendLovePulse(false)">
+      <button type="button" class="btn btn-accent" id="pulseBtn" onclick="sendLovePulse(false, event)">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
         <span>Послать сердечко в ответ</span>
       </button>
     </div>
 
     <div class="card hidden page-enter" id="page2Card">
-      <div class="card-title">Послание на станции</div>
+      <div class="card-title" style="display:flex; align-items:center; justify-content:space-between;">
+        <span>Послание для тебя</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color:var(--accent);"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+      </div>
 
       <div class="card-round-wrap hidden" id="page2RoundWrap">
         <div class="round-frame">
@@ -784,12 +858,14 @@
       <div class="msg-bubble" id="latestMsgText">—</div>
       <div class="msg-meta" id="latestMsgTime">—</div>
 
-      <button type="button" class="btn btn-accent" id="replyHeartBtn" onclick="sendLovePulse(true)">
+      <button type="button" class="btn btn-accent" id="replyHeartBtn" onclick="sendLovePulse(true, event)">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
         <span>Отправить сердечко в ответ</span>
       </button>
 
-      <div class="divider">
+      <div class="heart-divider" aria-hidden="true">♡</div>
+
+      <div>
         <div class="field-label">Сообщение для 3-й страницы</div>
         <div class="msg-bubble" id="plainMsgText">—</div>
         <div class="msg-meta" id="plainMsgTime">—</div>
@@ -1250,11 +1326,44 @@
       }
     }
 
-    async function sendLovePulse(fromMessagesPage) {
+    const CUTE_NOTES = [
+      'Люблю тебя сегодня и каждый день ♡',
+      'Ты делаешь каждый мой день теплее ♡',
+      'Самое любимое время — рядом с тобой ♡',
+      'Думаю о тебе прямо сейчас ♡'
+    ];
+    let cuteNoteIdx = 0;
+
+    function spawnFloatingHearts(btn) {
+      const r = btn.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + 8;
+      for (let i = 0; i < 6; i++) {
+        const el = document.createElement('span');
+        el.className = 'float-heart';
+        el.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>';
+        const dx = (Math.random() - 0.5) * 90;
+        el.style.left = (cx + (Math.random() - 0.5) * 60) + 'px';
+        el.style.top = cy + 'px';
+        el.style.setProperty('--hx', (dx * 0.5).toFixed(0) + 'px');
+        el.style.setProperty('--hx2', dx.toFixed(0) + 'px');
+        el.style.animationDelay = (i * 55) + 'ms';
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 1100);
+      }
+    }
+
+    async function sendLovePulse(fromMessagesPage, ev) {
       const btn = document.getElementById(fromMessagesPage ? 'replyHeartBtn' : 'pulseBtn');
+      spawnFloatingHearts(btn);
       const labelEl = btn.querySelector('span');
       const oldText = labelEl ? labelEl.textContent : btn.textContent;
-      if (labelEl) labelEl.textContent = 'Сердечко отправлено';
+      if (labelEl) labelEl.textContent = 'Сердечко улетело ♡';
+      const noteEl = document.getElementById('cutePhrase');
+      if (noteEl && !fromMessagesPage) {
+        cuteNoteIdx = (cuteNoteIdx + 1) % CUTE_NOTES.length;
+        noteEl.textContent = CUTE_NOTES[cuteNoteIdx];
+      }
       try {
         await fetch('/api/pulse?reply=1', { method: 'POST' });
       } catch (e) {}
