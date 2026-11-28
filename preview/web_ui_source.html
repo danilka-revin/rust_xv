@@ -1,22 +1,58 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Станция отношений</title>
   <style>
-    :root {
-      --bg: #07050c;
-      --card: rgba(16, 12, 24, 0.78);
-      --surface: rgba(255, 255, 255, 0.045);
-      --border: rgba(255, 255, 255, 0.095);
-      --pink: #ff3d77;
-      --pink-soft: #ff85ab;
-      --violet: #a855f7;
-      --text: #faf5f8;
-      --muted: #a694a8;
-      --ok: #34d399;
-      --err: #fb7185;
+    :root, [data-theme="light"] {
+      --bg: #f7f4ee;
+      --card: #fdfbf7;
+      --raised: #efe9df;
+      --border: rgba(31, 27, 22, 0.09);
+      --border-strong: rgba(31, 27, 22, 0.16);
+      --text: #1f1b16;
+      --text-2: #5e554a;
+      --muted: #7b7266;
+      --accent: #c8375a;
+      --accent-hover: #b12d4e;
+      --accent-soft: rgba(200, 55, 90, 0.09);
+      --accent-text: #a52445;
+      --ok: #16a34a;
+      --ok-soft: rgba(22, 163, 74, 0.10);
+      --err: #dc2626;
+      --err-soft: rgba(220, 38, 38, 0.09);
+      --shadow-sm: 0 1px 2px rgba(31, 27, 22, 0.05);
+      --shadow-md: 0 8px 24px rgba(31, 27, 22, 0.06);
+      --ring-bg: linear-gradient(145deg, #e7dfd3, #cfc4b4);
+      --btn-primary-bg: #1f1b16;
+      --btn-primary-text: #fdfbf7;
+      --btn-primary-hover: #352e26;
+    }
+
+    [data-theme="dark"] {
+      --bg: #161513;
+      --card: #1c1a18;
+      --raised: #262421;
+      --border: rgba(239, 233, 222, 0.09);
+      --border-strong: rgba(239, 233, 222, 0.18);
+      --text: #efe9de;
+      --text-2: #aaa398;
+      --muted: #8a847a;
+      --accent: #e25578;
+      --accent-hover: #ee6a8b;
+      --accent-soft: rgba(226, 85, 120, 0.14);
+      --accent-text: #f38ba5;
+      --ok: #4cc38a;
+      --ok-soft: rgba(76, 195, 138, 0.12);
+      --err: #e5484d;
+      --err-soft: rgba(229, 72, 77, 0.13);
+      --shadow-sm: none;
+      --shadow-md: none;
+      --ring-bg: linear-gradient(145deg, #2d2925, #141210);
+      --btn-primary-bg: #efe9de;
+      --btn-primary-text: #161513;
+      --btn-primary-hover: #ffffff;
     }
 
     * {
@@ -28,459 +64,507 @@
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
-      background: var(--bg);
+      background-color: var(--bg);
       color: var(--text);
       min-height: 100vh;
-      padding: 22px 16px 48px;
-      position: relative;
-      overflow-x: hidden;
-    }
-
-    /* React Bits: Dot Field + Soft Aurora Background */
-    .dot-field {
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      z-index: 0;
-      background-image: radial-gradient(rgba(255, 255, 255, 0.075) 1px, transparent 1px);
-      background-size: 24px 24px;
-      mask-image: radial-gradient(ellipse 85% 75% at 50% 28%, #000 35%, transparent 100%);
-      -webkit-mask-image: radial-gradient(ellipse 85% 75% at 50% 28%, #000 35%, transparent 100%);
-    }
-
-    .aurora-bg {
-      position: fixed;
-      inset: -20%;
-      pointer-events: none;
-      z-index: 0;
-      overflow: hidden;
-      filter: blur(68px);
-      opacity: 0.62;
-    }
-
-    .aurora-band {
-      position: absolute;
-      width: 68vmax;
-      height: 48vmax;
-      border-radius: 50%;
-      mix-blend-mode: screen;
-      animation: auroraDrift 16s ease-in-out infinite alternate;
-    }
-
-    .aurora-1 {
-      top: -12%;
-      left: -8%;
-      background: radial-gradient(circle, rgba(255, 61, 119, 0.48) 0%, rgba(168, 85, 247, 0.18) 52%, transparent 74%);
-    }
-
-    .aurora-2 {
-      bottom: -15%;
-      right: -10%;
-      background: radial-gradient(circle, rgba(168, 85, 247, 0.38) 0%, rgba(255, 122, 162, 0.16) 50%, transparent 74%);
-      animation-delay: -8s;
-      animation-duration: 21s;
-    }
-
-    @keyframes auroraDrift {
-      0% { transform: translate3d(0, 0, 0) scale(1) rotate(0deg); }
-      50% { transform: translate3d(6vw, 4vh, 0) scale(1.12) rotate(12deg); }
-      100% { transform: translate3d(-5vw, -3vh, 0) scale(0.95) rotate(-8deg); }
+      padding: 24px 16px 48px;
+      line-height: 1.5;
+      transition: background-color 180ms cubic-bezier(0.22, 1, 0.36, 1), color 180ms cubic-bezier(0.22, 1, 0.36, 1);
     }
 
     .container {
+      width: 100%;
       max-width: 440px;
       margin: 0 auto;
-      position: relative;
-      z-index: 1;
     }
 
-    .header {
-      text-align: center;
-      margin-bottom: 18px;
-      padding-top: 6px;
+    .topbar {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 20px;
     }
 
-    /* React Bits: Pulse Heart */
-    .heart-avatar {
-      width: 64px;
-      height: 64px;
-      margin: 0 auto 12px;
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .heart-mark {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: var(--accent-soft);
+      border: 1px solid var(--border);
       display: flex;
       align-items: center;
       justify-content: center;
-      position: relative;
-      background: linear-gradient(145deg, rgba(255, 61, 119, 0.28), rgba(168, 85, 247, 0.22));
-      border: 1px solid rgba(255, 133, 171, 0.42);
-      border-radius: 50%;
-      box-shadow: 0 0 32px rgba(255, 61, 119, 0.30), inset 0 1px 1px rgba(255, 255, 255, 0.25);
-      animation: heartbeat 1.7s ease-in-out infinite;
+      color: var(--accent);
+      flex-shrink: 0;
     }
 
-    .heart-avatar::after {
-      content: "";
-      position: absolute;
-      inset: -6px;
-      border-radius: 50%;
-      border: 1px solid rgba(255, 61, 119, 0.35);
-      animation: pulseRing 2.2s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
-    }
-
-    .heart-avatar svg {
-      width: 30px;
-      height: 30px;
-      fill: #ff5c8d;
-      filter: drop-shadow(0 0 10px rgba(255, 61, 119, 0.65));
-    }
-
-    @keyframes heartbeat {
-      0%, 100% { transform: scale(1); }
-      14% { transform: scale(1.09); }
-      28% { transform: scale(1); }
-      42% { transform: scale(1.05); }
-      65% { transform: scale(1); }
-    }
-
-    @keyframes pulseRing {
-      0% { transform: scale(0.95); opacity: 0.7; }
-      100% { transform: scale(1.32); opacity: 0; }
-    }
-
-    /* React Bits: BlurText + ShinyText */
     .title {
-      font-size: 24px;
-      font-weight: 800;
-      letter-spacing: -0.5px;
-      background: linear-gradient(110deg, #ffffff 25%, #ffb6cf 48%, #ffffff 72%);
-      background-size: 220% 100%;
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      animation: blurReveal 0.65s cubic-bezier(0.22, 1, 0.36, 1) both, shineSweep 5.5s linear infinite;
+      font-size: 20px;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      color: var(--text);
+      line-height: 1.2;
     }
 
     .subtitle {
       font-size: 13px;
       color: var(--muted);
-      margin-top: 4px;
-      letter-spacing: 0.1px;
-      animation: blurReveal 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+      margin-top: 2px;
     }
 
-    @keyframes blurReveal {
-      from { opacity: 0; filter: blur(8px); transform: translateY(6px); }
-      to { opacity: 1; filter: blur(0); transform: translateY(0); }
-    }
-
-    @keyframes shineSweep {
-      0% { background-position: 200% 0; }
-      100% { background-position: -200% 0; }
-    }
-
-    /* React Bits: Status Mark */
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 11px;
-      padding: 6px 14px;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 600;
-      background: rgba(255, 255, 255, 0.045);
-      border: 1px solid rgba(255, 255, 255, 0.11);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      color: #dfd3e0;
-    }
-
-    .dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #f59e0b;
-      box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
-    }
-
-    .dot.online {
-      background: #22c55e;
-      box-shadow: 0 0 10px rgba(34, 197, 94, 0.8);
-    }
-
-    /* React Bits: Rubber Segment / Sliding Pill Tabs */
-    .tabs {
-      position: relative;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 6px;
-      background: rgba(255, 255, 255, 0.04);
-      padding: 5px;
-      border-radius: 18px;
-      margin-bottom: 16px;
+    .theme-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
       border: 1px solid var(--border);
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
-    }
-
-    .tab-slider {
-      position: absolute;
-      top: 5px;
-      bottom: 5px;
-      left: 5px;
-      width: calc(50% - 8px);
-      border-radius: 13px;
-      background: linear-gradient(135deg, rgba(255, 61, 119, 0.24), rgba(168, 85, 247, 0.18));
-      border: 1px solid rgba(255, 133, 171, 0.34);
-      box-shadow: 0 4px 16px rgba(255, 61, 119, 0.18);
-      transition: transform 0.32s cubic-bezier(0.34, 1.45, 0.64, 1);
-      pointer-events: none;
-    }
-
-    .tabs[data-active="2"] .tab-slider {
-      transform: translateX(calc(100% + 6px));
-    }
-
-    .tab-btn {
-      position: relative;
-      z-index: 1;
-      border: none;
-      border-radius: 13px;
-      padding: 10px 8px;
-      font-size: 13.5px;
-      font-weight: 700;
-      background: transparent;
-      color: var(--muted);
-      cursor: pointer;
-      transition: color 0.2s;
+      background: var(--card);
+      color: var(--text-2);
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 6px;
+      cursor: pointer;
+      flex-shrink: 0;
+      box-shadow: var(--shadow-sm);
+      transition: background-color 150ms cubic-bezier(0.22, 1, 0.36, 1), border-color 150ms cubic-bezier(0.22, 1, 0.36, 1), transform 120ms cubic-bezier(0.22, 1, 0.36, 1);
     }
+
+    .theme-btn:hover { background: var(--raised); color: var(--text); }
+    .theme-btn:active { transform: scale(0.97); }
+
+    .status-line {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      color: var(--text-2);
+      background: var(--card);
+      border: 1px solid var(--border);
+      margin-bottom: 16px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+    }
+
+    .dot.online { background: var(--ok); }
+
+    .tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      padding: 4px;
+      border-radius: 12px;
+      background: var(--raised);
+      border: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+
+    .tab-btn {
+      height: 36px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--text-2);
+      font-size: 13.5px;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background-color 150ms cubic-bezier(0.22, 1, 0.36, 1), color 150ms cubic-bezier(0.22, 1, 0.36, 1), border-color 150ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .tab-btn:hover { color: var(--text); }
 
     .tab-btn.active {
-      color: #ffffff;
-    }
-
-    .unread-pill {
-      background: var(--pink);
-      color: #fff;
-      font-size: 10.5px;
-      padding: 1.5px 6px;
-      border-radius: 999px;
-      font-weight: 800;
-      box-shadow: 0 0 10px rgba(255, 61, 119, 0.6);
-    }
-
-    /* React Bits: Border Glow + Spotlight Card */
-    .card {
-      position: relative;
       background: var(--card);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border-radius: 26px;
-      padding: 22px 18px;
-      margin-bottom: 16px;
+      color: var(--text);
+      border-color: var(--border);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .unread-count {
+      font-size: 11.5px;
+      font-weight: 500;
+      padding: 1px 6px;
+      border-radius: 6px;
+      background: var(--accent);
+      color: #ffffff;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .card {
+      background: var(--card);
       border: 1px solid var(--border);
-      box-shadow: 0 18px 46px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-      overflow: hidden;
-      --mx: 50%;
-      --my: 0%;
-      --glow-o: 0;
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: var(--shadow-md);
+      transition: background-color 180ms cubic-bezier(0.22, 1, 0.36, 1), border-color 180ms cubic-bezier(0.22, 1, 0.36, 1);
     }
 
-    .card::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      border-radius: inherit;
-      padding: 1.2px;
-      background: radial-gradient(240px circle at var(--mx) var(--my), rgba(255, 85, 145, 0.72), rgba(168, 85, 247, 0.35) 45%, transparent 72%);
-      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-      -webkit-mask-composite: xor;
-      mask-composite: exclude;
-      opacity: var(--glow-o);
-      transition: opacity 0.28s ease;
-      pointer-events: none;
+    .page-enter {
+      animation: pageEnter 260ms cubic-bezier(0.22, 1, 0.36, 1);
     }
 
-    .card::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: radial-gradient(320px circle at var(--mx) var(--my), rgba(255, 61, 119, 0.09), transparent 65%);
-      opacity: var(--glow-o);
-      transition: opacity 0.28s ease;
-      pointer-events: none;
-    }
-
-    .card > * {
-      position: relative;
-      z-index: 1;
+    @keyframes pageEnter {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
     .card-title {
-      font-size: 17px;
-      font-weight: 700;
-      text-align: center;
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--text);
       margin-bottom: 6px;
-      letter-spacing: -0.2px;
     }
 
     .card-desc {
       font-size: 13.5px;
-      line-height: 1.5;
-      color: var(--muted);
-      text-align: center;
+      color: var(--text-2);
       margin-bottom: 16px;
     }
 
-    .since-pill {
-      display: inline-block;
-      background: rgba(255, 61, 119, 0.12);
-      border: 1px solid rgba(255, 133, 171, 0.28);
-      color: #ffc2d6;
-      font-weight: 600;
-      font-size: 12.5px;
-      padding: 5px 14px;
-      border-radius: 999px;
-      margin-bottom: 14px;
+    .timer-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 16px;
     }
 
-    .timer-center {
-      text-align: center;
+    .since-label {
+      font-size: 13px;
+      color: var(--muted);
     }
 
     .days-hero {
-      margin: 2px 0 18px;
+      padding: 16px 0 20px;
+      text-align: center;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
     }
 
     .days-number {
-      font-size: 54px;
-      font-weight: 900;
-      line-height: 1.04;
-      letter-spacing: -1.5px;
+      font-size: 56px;
+      font-weight: 500;
+      line-height: 1.02;
+      letter-spacing: -0.03em;
+      color: var(--text);
       font-variant-numeric: tabular-nums;
-      background: linear-gradient(125deg, #ffffff 10%, #ff8cb2 52%, #ff3d77 95%);
-      background-size: 200% 100%;
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      animation: shineSweep 7s linear infinite;
-      word-break: break-word;
     }
 
     .days-word {
-      font-size: 13px;
-      font-weight: 700;
-      color: var(--muted);
-      margin-top: 6px;
-      letter-spacing: 2px;
-      text-transform: uppercase;
+      font-size: 14px;
+      color: var(--accent-text);
+      font-weight: 500;
+      margin-top: 8px;
     }
 
     .time-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 10px;
-      margin-bottom: 14px;
+      gap: 8px;
+      margin-bottom: 12px;
     }
 
     .time-box {
-      background: rgba(255, 255, 255, 0.038);
-      border: 1px solid rgba(255, 255, 255, 0.085);
-      border-radius: 18px;
-      padding: 13px 6px;
+      background: var(--raised);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 8px;
       text-align: center;
     }
 
     .time-val {
-      font-size: 25px;
-      font-weight: 800;
-      color: #ffffff;
+      font-size: 24px;
+      font-weight: 500;
+      color: var(--text);
       font-variant-numeric: tabular-nums;
+      line-height: 1.1;
     }
 
     .time-lbl {
-      font-size: 11.5px;
-      font-weight: 600;
+      font-size: 12px;
       color: var(--muted);
-      margin-top: 3px;
+      margin-top: 4px;
     }
 
     .totals-box {
-      background: rgba(255, 255, 255, 0.032);
-      border-radius: 16px;
-      padding: 12px 14px;
-      font-size: 13px;
-      color: var(--muted);
-      line-height: 1.65;
+      background: var(--raised);
       border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: var(--text-2);
       text-align: center;
       font-variant-numeric: tabular-nums;
+      margin-bottom: 12px;
     }
 
     .totals-box strong {
-      color: #ffb8d0;
+      font-weight: 500;
+      color: var(--text);
     }
 
-    .weather-pill {
-      margin-top: 10px;
+    .weather-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--bg);
       font-size: 13px;
-      font-weight: 600;
-      color: #f3e6ef;
-      background: rgba(255, 255, 255, 0.038);
-      border: 1px solid rgba(255, 255, 255, 0.09);
-      border-radius: 15px;
-      padding: 10px 12px;
+      color: var(--text-2);
+      margin-bottom: 16px;
     }
+
+    .weather-mood {
+      font-weight: 500;
+      color: var(--ok);
+      white-space: nowrap;
+    }
+
+    .btn {
+      width: 100%;
+      height: 44px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      font-size: 14px;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background-color 140ms cubic-bezier(0.22, 1, 0.36, 1), border-color 140ms cubic-bezier(0.22, 1, 0.36, 1), transform 120ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .btn:active { transform: scale(0.98); }
+    .btn:disabled { opacity: 0.6; cursor: wait; }
+
+    .btn-primary {
+      background: var(--btn-primary-bg);
+      color: var(--btn-primary-text);
+    }
+    .btn-primary:hover { background: var(--btn-primary-hover); }
+
+    .btn-accent {
+      background: var(--accent);
+      color: #ffffff;
+    }
+    .btn-accent:hover { background: var(--accent-hover); }
+
+    .btn-soft {
+      background: var(--raised);
+      color: var(--text);
+      border-color: var(--border);
+    }
+    .btn-soft:hover { border-color: var(--border-strong); }
 
     .card-round-wrap {
       display: flex;
       justify-content: center;
-      margin: 12px 0 14px;
+      margin: 12px 0 16px;
     }
 
-    canvas.round-postcard {
-      width: 240px;
-      height: 240px;
+    .round-frame {
+      width: 244px;
+      height: 244px;
+      padding: 10px;
       border-radius: 50%;
-      background: #09060c;
-      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.55), 0 0 0 2px rgba(255, 133, 171, 0.35), 0 0 28px rgba(255, 61, 119, 0.22);
+      background: var(--ring-bg);
+      border: 1px solid var(--border-strong);
+      box-shadow: var(--shadow-md);
+    }
+
+    .round-postcard {
+      width: 222px;
+      height: 222px;
+      border-radius: 50%;
+      background: #000000;
       display: block;
     }
 
-    @keyframes pageFadeSlide {
-      from { opacity: 0; filter: blur(6px); transform: translateY(8px) scale(0.985); }
-      to { opacity: 1; filter: blur(0); transform: translateY(0) scale(1); }
-    }
-
-    .page-anim {
-      animation: pageFadeSlide 0.32s cubic-bezier(0.22, 1, 0.36, 1);
-    }
-
     .msg-bubble {
-      background: rgba(255, 255, 255, 0.042);
-      border: 1px solid rgba(255, 133, 171, 0.24);
-      border-radius: 18px;
-      padding: 16px 15px;
-      font-size: 16px;
-      font-weight: 600;
+      background: var(--raised);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-size: 15px;
       line-height: 1.5;
       color: var(--text);
-      text-align: center;
+      margin-bottom: 6px;
       white-space: pre-wrap;
       word-break: break-word;
-      margin: 8px 0 8px;
     }
 
     .msg-meta {
-      text-align: center;
       font-size: 12px;
       color: var(--muted);
       margin-bottom: 14px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .divider {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    .field-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-2);
+      margin-bottom: 6px;
+    }
+
+    .input-wrap {
+      position: relative;
+      margin-bottom: 12px;
+    }
+
+    .input, .select {
+      width: 100%;
+      height: 40px;
+      padding: 0 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border-strong);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .input:focus, .select:focus {
+      border-color: var(--accent);
+    }
+
+    .eye-btn {
+      position: absolute;
+      right: 6px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 28px;
+      height: 28px;
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+    }
+    .eye-btn:hover { color: var(--text); }
+
+    .net-list {
+      max-height: 168px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--bg);
+      margin-bottom: 12px;
+    }
+
+    .net-item {
+      height: 40px;
+      padding: 0 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      font-size: 13.5px;
+      color: var(--text);
+      transition: background-color 120ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .net-item:last-child { border-bottom: none; }
+    .net-item:hover { background: var(--raised); }
+    .net-item.selected { background: var(--accent-soft); color: var(--accent-text); font-weight: 500; }
+
+    .steps {
+      background: var(--raised);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 16px;
+      font-size: 13px;
+      color: var(--text-2);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .step-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .step-num {
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 11.5px;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .alert {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      display: none;
+    }
+    .alert.ok { display: block; background: var(--ok-soft); border: 1px solid var(--ok); color: var(--ok); }
+    .alert.err { display: block; background: var(--err-soft); border: 1px solid var(--err); color: var(--err); }
+
+    .ip-chip {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      background: var(--card);
+      border: 1px solid var(--border-strong);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: var(--text);
+      font-size: 13px;
+      text-decoration: none;
     }
 
     .history-list {
       margin-top: 16px;
-      padding-top: 14px;
+      padding-top: 16px;
       border-top: 1px solid var(--border);
       display: flex;
       flex-direction: column;
@@ -488,362 +572,137 @@
     }
 
     .history-item {
-      background: rgba(255, 255, 255, 0.035);
+      background: var(--bg);
       border: 1px solid var(--border);
-      border-radius: 14px;
+      border-radius: 10px;
       padding: 10px 12px;
       font-size: 13.5px;
-      line-height: 1.45;
       color: var(--text);
-      transition: border-color 0.15s, background 0.15s;
+      cursor: pointer;
+      transition: background-color 120ms cubic-bezier(0.22, 1, 0.36, 1);
     }
-
-    .history-item:hover {
-      border-color: rgba(255, 133, 171, 0.38);
-      background: rgba(255, 61, 119, 0.07);
-    }
+    .history-item:hover { background: var(--raised); }
 
     .history-time {
       display: block;
-      font-size: 11.5px;
+      font-size: 12px;
       color: var(--muted);
-      margin-top: 3px;
-    }
-
-    /* React Bits: Specular Button */
-    .btn {
-      position: relative;
-      width: 100%;
-      border: none;
-      border-radius: 16px;
-      padding: 13px 18px;
-      font-size: 14.5px;
-      font-weight: 700;
-      cursor: pointer;
-      overflow: hidden;
-      transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s, opacity 0.2s;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      --bx: 50%;
-      --by: 50%;
-    }
-
-    .btn::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: radial-gradient(120px circle at var(--bx) var(--by), rgba(255, 255, 255, 0.26), transparent 65%);
-      opacity: 0;
-      transition: opacity 0.2s;
-      pointer-events: none;
-    }
-
-    .btn:hover::after {
-      opacity: 1;
-    }
-
-    .btn:active {
-      transform: scale(0.97);
-    }
-
-    .btn-primary {
-      background: linear-gradient(135deg, #ff3d77 0%, #c82257 100%);
-      color: #fff;
-      border: 1px solid rgba(255, 165, 195, 0.42);
-      box-shadow: 0 8px 24px rgba(255, 61, 119, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.30);
-    }
-
-    .btn-soft {
-      background: rgba(255, 255, 255, 0.055);
-      color: #ffd9e6;
-      border: 1px solid rgba(255, 255, 255, 0.14);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
-    }
-
-    .btn:disabled {
-      opacity: 0.6;
-      cursor: wait;
-    }
-
-    .steps {
-      background: rgba(255, 255, 255, 0.032);
-      border-radius: 16px;
-      padding: 12px 14px;
-      margin-bottom: 16px;
-      border: 1px solid var(--border);
-      font-size: 13px;
-      line-height: 1.55;
-      color: #e4d8e6;
-    }
-
-    .steps div + div {
-      margin-top: 6px;
-    }
-
-    .step-num {
-      display: inline-flex;
-      width: 20px;
-      height: 20px;
-      border-radius: 50%;
-      background: rgba(255, 61, 119, 0.22);
-      border: 1px solid rgba(255, 133, 171, 0.45);
-      color: #ffd0e0;
-      font-size: 11.5px;
-      font-weight: 700;
-      align-items: center;
-      justify-content: center;
-      margin-right: 7px;
-    }
-
-    .field-label {
-      display: block;
-      font-size: 12.5px;
-      font-weight: 700;
-      margin-bottom: 6px;
-      color: #e4d8e6;
-    }
-
-    .net-list {
-      display: flex;
-      flex-direction: column;
-      gap: 7px;
-      max-height: 190px;
-      overflow-y: auto;
-      margin-bottom: 12px;
-    }
-
-    .net-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 11px 14px;
-      background: rgba(255, 255, 255, 0.035);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      cursor: pointer;
-      font-size: 13.5px;
-      font-weight: 600;
-      color: var(--text);
-      transition: border-color 0.15s, background 0.15s;
-    }
-
-    .net-item.selected {
-      border-color: var(--pink);
-      background: rgba(255, 61, 119, 0.14);
-      color: #ffffff;
-    }
-
-    .input-wrap {
-      position: relative;
-      margin-bottom: 14px;
-    }
-
-    .input, .select {
-      width: 100%;
-      padding: 12px 14px;
-      border-radius: 14px;
-      border: 1px solid var(--border);
-      background: rgba(0, 0, 0, 0.34);
-      font-size: 14.5px;
-      color: var(--text);
-      outline: none;
-      transition: border-color 0.2s, box-shadow 0.2s;
-    }
-
-    .input-wrap .input {
-      padding-right: 44px;
-    }
-
-    .input:focus, .select:focus {
-      border-color: rgba(255, 85, 145, 0.72);
-      box-shadow: 0 0 0 3px rgba(255, 61, 119, 0.16);
-    }
-
-    .select {
-      margin-bottom: 14px;
-    }
-
-    .select option {
-      background: #140f1c;
-      color: #fff;
-    }
-
-    .eye-btn {
-      position: absolute;
-      right: 10px;
-      top: 50%;
-      transform: translateY(-50%);
-      border: none;
-      background: none;
-      font-size: 17px;
-      cursor: pointer;
-      padding: 4px;
-    }
-
-    .alert {
-      margin-top: 12px;
-      padding: 11px 13px;
-      border-radius: 14px;
-      font-size: 13px;
-      line-height: 1.45;
-      display: none;
-    }
-
-    .alert.ok {
-      display: block;
-      background: rgba(52, 211, 153, 0.12);
-      color: #a7f3d0;
-      border: 1px solid rgba(52, 211, 153, 0.35);
-    }
-
-    .alert.err {
-      display: block;
-      background: rgba(251, 113, 133, 0.13);
-      color: #fecdd3;
-      border: 1px solid rgba(251, 113, 133, 0.38);
-    }
-
-    .ip-chip {
-      display: inline-block;
-      margin-top: 8px;
-      padding: 6px 12px;
-      background: rgba(255, 255, 255, 0.08);
-      border-radius: 10px;
-      font-weight: 700;
-      color: #ffd0e0;
-      border: 1px solid rgba(255, 133, 171, 0.35);
-      text-decoration: none;
+      margin-top: 2px;
     }
 
     .settings-toggle {
       text-align: center;
-      margin-top: 6px;
+      margin-top: 8px;
     }
 
     .link-btn {
-      background: none;
+      background: transparent;
       border: none;
       color: var(--muted);
       font-size: 13px;
-      font-weight: 600;
+      font-family: inherit;
       cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
       padding: 8px 12px;
-      border-radius: 10px;
-      transition: color 0.15s, background 0.15s;
+      border-radius: 8px;
     }
+    .link-btn:hover { color: var(--text); background: var(--raised); }
 
-    .link-btn:hover {
-      color: #fff;
-      background: rgba(255, 255, 255, 0.05);
-    }
-
-    .divider {
-      margin-top: 16px;
-      padding-top: 14px;
-      border-top: 1px solid var(--border);
-    }
-
-    .spark {
-      position: fixed;
-      width: 5px;
-      height: 5px;
-      border-radius: 50%;
-      pointer-events: none;
-      z-index: 99;
-      background: #ff85ab;
-      box-shadow: 0 0 8px #ff3d77;
-      animation: sparkOut 0.48s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    }
-
-    @keyframes sparkOut {
-      from { transform: translate(0, 0) scale(1); opacity: 1; }
-      to { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
-    }
-
-    .hidden {
-      display: none !important;
-    }
+    .hidden { display: none !important; }
   </style>
 </head>
 <body>
-  <div class="aurora-bg">
-    <div class="aurora-band aurora-1"></div>
-    <div class="aurora-band aurora-2"></div>
-  </div>
-  <div class="dot-field"></div>
-
   <div class="container">
-    <div class="header">
-      <div class="heart-avatar">
-        <svg viewBox="0 0 24 24">
-          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-        </svg>
+    <div class="topbar">
+      <div class="brand">
+        <div class="heart-mark" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+          </svg>
+        </div>
+        <div>
+          <div class="title">Станция отношений</div>
+          <div class="subtitle">Маленький хранитель нашей любви</div>
+        </div>
       </div>
-      <div class="title">Станция отношений</div>
-      <div class="subtitle">Маленький хранитель нашей любви</div>
-      <div class="badge">
-        <span class="dot" id="wifiDot"></span>
-        <span id="wifiBadgeText">Проверяем соединение...</span>
-      </div>
+
+      <button type="button" class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Переключить тему" aria-label="Переключить тему">
+        <svg id="themeIconSun" class="hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+        <svg id="themeIconMoon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+      </button>
     </div>
 
-    <div class="tabs" id="mainTabs" data-active="1">
-      <div class="tab-slider"></div>
+    <div class="status-line">
+      <span class="dot" id="wifiDot"></span>
+      <span id="wifiBadgeText">Проверяем соединение</span>
+    </div>
+
+    <div class="tabs" id="mainTabs">
       <button type="button" class="tab-btn active" id="tabBtn1" onclick="switchPage(1)">
-        ⏱ Наше время
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <span>Наше время</span>
       </button>
       <button type="button" class="tab-btn" id="tabBtn2" onclick="switchPage(2)">
-        💌 Послания <span class="unread-pill hidden" id="unreadBadge">1</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+        <span>Послания</span>
+        <span class="unread-count hidden" id="unreadBadge">1</span>
       </button>
     </div>
 
     <div class="card hidden" id="setupCard">
       <div class="card-title" id="setupTitle">Подключение к домашнему Wi-Fi</div>
       <div class="card-desc" id="setupDesc">
-        Выбери домашнюю сеть — пароль сохранится в памяти станции и больше вводить его не придётся.
+        Выбери домашнюю сеть. Пароль сохранится в памяти станции и больше вводить его не придётся.
       </div>
 
       <div class="steps">
-        <div><span class="step-num">1</span>Выбери свой домашний Wi-Fi в списке ниже</div>
-        <div><span class="step-num">2</span>Введи пароль от сети</div>
-        <div><span class="step-num">3</span>Нажми «Подключить к Wi-Fi»</div>
+        <div class="step-row"><span class="step-num">1</span><span>Выбери свой домашний Wi-Fi в списке ниже</span></div>
+        <div class="step-row"><span class="step-num">2</span><span>Введи пароль от сети</span></div>
+        <div class="step-row"><span class="step-num">3</span><span>Нажми «Подключить к Wi-Fi»</span></div>
       </div>
 
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-        <span class="field-label" style="margin:0;">Доступные сети:</span>
-        <button type="button" class="link-btn" style="padding:2px 6px; font-size:12px;" onclick="scanNetworks(true)">🔄 Обновить</button>
+        <span class="field-label" style="margin:0;">Доступные сети</span>
+        <button type="button" class="link-btn" style="padding:4px 8px; font-size:12px;" onclick="scanNetworks(true)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+          <span>Обновить</span>
+        </button>
       </div>
 
       <div class="net-list" id="netList">
-        <div style="text-align:center; padding:14px; color:var(--muted); font-size:13px;">Поиск сетей Wi-Fi...</div>
+        <div style="text-align:center; padding:14px; color:var(--muted); font-size:13px;">Поиск сетей Wi-Fi</div>
       </div>
 
-      <label class="field-label" for="ssidInput">Название сети (Wi-Fi):</label>
+      <label class="field-label" for="ssidInput">Название сети (Wi-Fi)</label>
       <div class="input-wrap">
         <input class="input" id="ssidInput" type="text" placeholder="Выбери выше или введи вручную" autocomplete="off">
       </div>
 
-      <label class="field-label" for="passInput">Пароль:</label>
+      <label class="field-label" for="passInput">Пароль</label>
       <div class="input-wrap">
-        <input class="input" id="passInput" type="password" placeholder="Пароль от домашнего Wi-Fi">
-        <button type="button" class="eye-btn" onclick="togglePass()" title="Показать пароль">👁️</button>
+        <input class="input" id="passInput" type="password" placeholder="Пароль от домашнего Wi-Fi" style="padding-right:40px;">
+        <button type="button" class="eye-btn" onclick="togglePass()" title="Показать пароль">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
       </div>
 
-      <label class="field-label" for="tzSelect">Часовой пояс:</label>
-      <select class="select" id="tzSelect">
-        <option value="2">Калининград (UTC+2)</option>
-        <option value="3" selected>Москва / Санкт-Петербург (UTC+3)</option>
-        <option value="4">Самара (UTC+4)</option>
-        <option value="5">Екатеринбург (UTC+5)</option>
-        <option value="6">Омск (UTC+6)</option>
-        <option value="7">Новосибирск / Красноярск (UTC+7)</option>
-        <option value="8">Иркутск (UTC+8)</option>
-        <option value="9">Якутск (UTC+9)</option>
-        <option value="10">Владивосток (UTC+10)</option>
-        <option value="1">Европа / Амстердам (UTC+1)</option>
-      </select>
+      <label class="field-label" for="tzSelect">Часовой пояс</label>
+      <div class="input-wrap" style="margin-bottom:16px;">
+        <select class="select" id="tzSelect">
+          <option value="2">Калининград (UTC+2)</option>
+          <option value="3" selected>Москва / Санкт-Петербург (UTC+3)</option>
+          <option value="4">Самара (UTC+4)</option>
+          <option value="5">Екатеринбург (UTC+5)</option>
+          <option value="6">Омск (UTC+6)</option>
+          <option value="7">Новосибирск / Красноярск (UTC+7)</option>
+          <option value="8">Иркутск (UTC+8)</option>
+          <option value="9">Якутск (UTC+9)</option>
+          <option value="10">Владивосток (UTC+10)</option>
+          <option value="1">Европа / Амстердам (UTC+1)</option>
+        </select>
+      </div>
 
       <button type="button" class="btn btn-primary" id="saveWifiBtn" onclick="connectWifi()">
         Подключить к Wi-Fi
@@ -851,34 +710,36 @@
 
       <div class="alert" id="wifiAlert"></div>
 
-      <div id="otaBox" class="hidden divider" style="text-align:center;">
-        <div style="text-align:left; margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid var(--border);">
-          <label class="field-label" for="weatherCityInput">🌤 Город для 4-й страницы погоды:</label>
+      <div id="otaBox" class="hidden divider">
+        <div style="margin-bottom:16px; padding-bottom:16px; border-bottom:1px solid var(--border);">
+          <label class="field-label" for="weatherCityInput">Город для 4-й страницы погоды</label>
           <div style="display:flex; gap:8px;">
-            <input class="input" id="weatherCityInput" type="text" value="Москва" placeholder="Например: Казань" style="padding:10px 12px;">
-            <button type="button" class="btn btn-soft" style="width:auto; padding:10px 14px; white-space:nowrap;" id="saveCityBtn" onclick="saveWeatherCity()">
+            <input class="input" id="weatherCityInput" type="text" value="Москва" placeholder="Казань">
+            <button type="button" class="btn btn-soft" style="width:auto; padding:0 16px; height:40px; white-space:nowrap;" id="saveCityBtn" onclick="saveWeatherCity()">
               Сохранить
             </button>
           </div>
           <div class="alert" id="cityAlert"></div>
         </div>
 
-        <div style="font-size:13px; color:var(--muted); margin-bottom:10px;">
-          Версия системы: <strong id="fwVerText" style="color:#fff;">v1.3.8</strong> (автообновление включено)
+        <div style="font-size:13px; color:var(--text-2); margin-bottom:12px;">
+          Версия системы: <strong id="fwVerText" style="color:var(--text); font-weight:500;">v1.3.8</strong>
         </div>
         <button type="button" class="btn btn-soft" id="otaCheckBtn" onclick="triggerOtaCheck()">
-          🔄 Проверить обновление с GitHub
+          Проверить обновление с GitHub
         </button>
         <div class="alert" id="otaAlert"></div>
       </div>
     </div>
 
-    <div class="card timer-center page-anim" id="page1Card">
-      <div class="since-pill">Мы вместе с 21 октября 2026</div>
+    <div class="card page-enter" id="page1Card">
+      <div class="timer-header">
+        <span class="since-label">Вместе с 21 октября 2026</span>
+      </div>
 
       <div class="days-hero">
         <div class="days-number" id="daysNum">0</div>
-        <div class="days-word" id="daysWord">ДНЕЙ ВМЕСТЕ</div>
+        <div class="days-word" id="daysWord">Дней вместе</div>
       </div>
 
       <div class="time-grid">
@@ -897,58 +758,60 @@
       </div>
 
       <div class="totals-box" id="cuteStats">
-        Считаем время...
+        Считаем время
       </div>
 
-      <div class="weather-pill" id="weatherMiniPill">
-        🌤 Погода: <span id="weatherMiniText">—</span> • <span id="weatherMoodText" style="color:var(--ok);">Гулябельно ❤️</span>
+      <div class="weather-row" id="weatherMiniPill">
+        <span id="weatherMiniText">—</span>
+        <span class="weather-mood" id="weatherMoodText">Гулябельно</span>
       </div>
 
-      <div style="margin-top: 16px;">
-        <button type="button" class="btn btn-soft" id="pulseBtn" onclick="sendLovePulse(false, event)">
-          ❤️ Послать сердечко в ответ
-        </button>
-      </div>
+      <button type="button" class="btn btn-accent" id="pulseBtn" onclick="sendLovePulse(false)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+        <span>Послать сердечко в ответ</span>
+      </button>
     </div>
 
-    <div class="card hidden page-anim" id="page2Card">
-      <div class="card-title">Послание для тебя</div>
+    <div class="card hidden page-enter" id="page2Card">
+      <div class="card-title">Послание на станции</div>
 
       <div class="card-round-wrap hidden" id="page2RoundWrap">
-        <canvas class="round-postcard" id="page2CardCanvas" width="240" height="240"></canvas>
+        <div class="round-frame">
+          <canvas class="round-postcard" id="page2CardCanvas" width="240" height="240"></canvas>
+        </div>
       </div>
 
       <div class="msg-bubble" id="latestMsgText">—</div>
       <div class="msg-meta" id="latestMsgTime">—</div>
 
-      <button type="button" class="btn btn-primary" id="replyHeartBtn" onclick="sendLovePulse(true, event)">
-        ❤️ Отправить сердечко в ответ
+      <button type="button" class="btn btn-accent" id="replyHeartBtn" onclick="sendLovePulse(true)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+        <span>Отправить сердечко в ответ</span>
       </button>
 
       <div class="divider">
-        <div class="field-label">💬 Сообщение для 3-й страницы:</div>
-        <div class="msg-bubble" id="plainMsgText" style="padding:12px 14px; margin-bottom:6px; font-size:14.5px;">—</div>
-        <div class="msg-meta" id="plainMsgTime" style="margin-bottom:10px;">—</div>
+        <div class="field-label">Сообщение для 3-й страницы</div>
+        <div class="msg-bubble" id="plainMsgText">—</div>
+        <div class="msg-meta" id="plainMsgTime">—</div>
         <div class="input-wrap" style="margin-bottom:8px;">
-          <input class="input" id="plainInput" type="text" maxlength="280" placeholder="Напиши текст для 3-й страницы..." style="padding-right:14px;">
+          <input class="input" id="plainInput" type="text" maxlength="280" placeholder="Текст для 3-й страницы">
         </div>
-        <button type="button" class="btn btn-soft" id="sendPlainSiteBtn" onclick="sendPlainToStation(event)">
-          ✉️ Отправить текст на 3-ю страницу
+        <button type="button" class="btn btn-soft" id="sendPlainSiteBtn" onclick="sendPlainToStation()">
+          Отправить текст на 3-ю страницу
         </button>
         <div class="alert" id="plainSiteAlert"></div>
       </div>
 
       <div class="history-list hidden" id="historyWrap">
-        <div style="font-size:12.5px; font-weight:700; color:var(--muted); margin-bottom:2px;">
-          Предыдущие открытки и послания:
-        </div>
-        <div id="historyItems"></div>
+        <div class="field-label" style="margin-bottom:4px;">Предыдущие открытки</div>
+        <div id="historyItems" style="display:flex; flex-direction:column; gap:8px;"></div>
       </div>
     </div>
 
     <div class="settings-toggle" id="settingsToggleWrap">
       <button type="button" class="link-btn" onclick="toggleSetupCard()">
-        ⚙️ Настройки Wi-Fi и системы
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+        <span>Настройки Wi-Fi и системы</span>
       </button>
     </div>
   </div>
@@ -959,43 +822,24 @@
     let selectedCardIdx = 0;
     let lastCardSig = '';
 
-    // React Bits interactive Border Glow & Specular Button pointer tracking
-    document.addEventListener('pointermove', (e) => {
-      document.querySelectorAll('.card').forEach(c => {
-        if (c.classList.contains('hidden')) return;
-        const r = c.getBoundingClientRect();
-        const x = e.clientX - r.left;
-        const y = e.clientY - r.top;
-        c.style.setProperty('--mx', x + 'px');
-        c.style.setProperty('--my', y + 'px');
-        const near = x > -60 && y > -60 && x < r.width + 60 && y < r.height + 60;
-        c.style.setProperty('--glow-o', near ? '1' : '0');
-      });
-      if (e.target && e.target.closest) {
-        const b = e.target.closest('.btn');
-        if (b) {
-          const br = b.getBoundingClientRect();
-          b.style.setProperty('--bx', (e.clientX - br.left) + 'px');
-          b.style.setProperty('--by', (e.clientY - br.top) + 'px');
-        }
-      }
-    }, { passive: true });
-
-    function spawnClickSparks(ev) {
-      if (!ev || !ev.clientX) return;
-      for (let i = 0; i < 8; i++) {
-        const sp = document.createElement('span');
-        sp.className = 'spark';
-        const ang = (Math.PI * 2 * i) / 8 + (Math.random() - 0.5) * 0.3;
-        const dist = 22 + Math.random() * 20;
-        sp.style.left = ev.clientX + 'px';
-        sp.style.top = ev.clientY + 'px';
-        sp.style.setProperty('--tx', Math.cos(ang) * dist + 'px');
-        sp.style.setProperty('--ty', Math.sin(ang) * dist + 'px');
-        document.body.appendChild(sp);
-        setTimeout(() => sp.remove(), 500);
-      }
+    function applyTheme(t) {
+      const theme = (t === 'dark') ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', theme);
+      document.getElementById('themeIconSun').classList.toggle('hidden', theme !== 'dark');
+      document.getElementById('themeIconMoon').classList.toggle('hidden', theme === 'dark');
+      try { localStorage.setItem('love_station_theme', theme); } catch (e) {}
     }
+
+    function toggleTheme() {
+      const cur = document.documentElement.getAttribute('data-theme') || 'light';
+      applyTheme(cur === 'dark' ? 'light' : 'dark');
+    }
+
+    (function initTheme() {
+      let saved = 'light';
+      try { saved = localStorage.getItem('love_station_theme') || 'light'; } catch (e) {}
+      applyTheme(saved);
+    })();
 
     function plural(n, one, two, five) {
       n = Math.abs(n) % 100;
@@ -1012,7 +856,6 @@
 
     function switchPage(pageNum) {
       activePage = pageNum;
-      document.getElementById('mainTabs').setAttribute('data-active', String(pageNum));
       document.getElementById('tabBtn1').classList.toggle('active', pageNum === 1);
       document.getElementById('tabBtn2').classList.toggle('active', pageNum === 2);
       const p1 = document.getElementById('page1Card');
@@ -1021,9 +864,9 @@
       p2.classList.toggle('hidden', pageNum !== 2);
 
       const target = (pageNum === 1) ? p1 : p2;
-      target.classList.remove('page-anim');
+      target.classList.remove('page-enter');
       void target.offsetWidth;
-      target.classList.add('page-anim');
+      target.classList.add('page-enter');
 
       if (pageNum === 2) {
         document.getElementById('unreadBadge').classList.add('hidden');
@@ -1044,7 +887,7 @@
       const secs = diff % 60;
 
       document.getElementById('daysNum').textContent = days.toLocaleString('ru-RU');
-      document.getElementById('daysWord').textContent = plural(days, 'ДЕНЬ ВМЕСТЕ', 'ДНЯ ВМЕСТЕ', 'ДНЕЙ ВМЕСТЕ');
+      document.getElementById('daysWord').textContent = plural(days, 'День вместе', 'Дня вместе', 'Дней вместе');
 
       document.getElementById('hoursVal').textContent = pad2(hours);
       document.getElementById('hoursLbl').textContent = plural(hours, 'час', 'часа', 'часов');
@@ -1058,9 +901,9 @@
       const totalHours = Math.floor(diff / 3600);
       const totalMins = Math.floor(diff / 60);
       document.getElementById('cuteStats').innerHTML =
-        `Всего: <strong>${totalHours.toLocaleString('ru-RU')}</strong> ${plural(totalHours, 'час', 'часа', 'часов')} • ` +
-        `<strong>${totalMins.toLocaleString('ru-RU')}</strong> ${plural(totalMins, 'минута', 'минуты', 'минут')}<br>` +
-        `или <strong>${diff.toLocaleString('ru-RU')}</strong> ${plural(diff, 'секунда', 'секунды', 'секунд')}`;
+        `Всего <strong>${totalHours.toLocaleString('ru-RU')}</strong> ${plural(totalHours, 'час', 'часа', 'часов')} · ` +
+        `<strong>${totalMins.toLocaleString('ru-RU')}</strong> ${plural(totalMins, 'минута', 'минуты', 'минут')} · ` +
+        `<strong>${diff.toLocaleString('ru-RU')}</strong> ${plural(diff, 'секунда', 'секунды', 'секунд')}`;
     }
 
     function togglePass() {
@@ -1176,7 +1019,7 @@
 
     function viewHistoryItem(idx, text, time, hasCard) {
       selectedCardIdx = idx;
-      document.getElementById('latestMsgText').textContent = text || 'Открытка для тебя ❤️';
+      document.getElementById('latestMsgText').textContent = text || 'Открытка для тебя';
       document.getElementById('latestMsgTime').textContent = formatEpochRu(time);
       if (hasCard) loadCardCanvas(idx);
       else document.getElementById('page2RoundWrap').classList.add('hidden');
@@ -1217,7 +1060,7 @@
         if (Array.isArray(data.history) && data.history.length > 1) {
           histWrap.classList.remove('hidden');
           histBox.innerHTML = data.history.map((item, idx) =>
-            `<div class="history-item" style="cursor:pointer;" onclick="viewHistoryItem(${idx}, ${JSON.stringify(item.text).replace(/"/g,'&quot;')}, ${item.time}, ${!!item.has_card})">${item.has_card ? '🖼 ' : ''}${escapeHtml(item.text)}<span class="history-time">${formatEpochRu(item.time)}</span></div>`
+            `<div class="history-item" onclick="viewHistoryItem(${idx}, ${JSON.stringify(item.text).replace(/"/g,'&quot;')}, ${item.time}, ${!!item.has_card})">${escapeHtml(item.text)}<span class="history-time">${formatEpochRu(item.time)}</span></div>`
           ).join('');
         } else {
           histWrap.classList.add('hidden');
@@ -1245,7 +1088,7 @@
           document.getElementById('ssidInput').value = data.saved_ssid;
         }
         if (data.has_saved_pass) {
-          document.getElementById('passInput').placeholder = 'Пароль сохранён в памяти ✓';
+          document.getElementById('passInput').placeholder = 'Пароль сохранён в памяти';
         }
 
         const dot = document.getElementById('wifiDot');
@@ -1255,7 +1098,7 @@
 
         if (data.connected) {
           dot.classList.add('online');
-          badge.textContent = `В сети "${data.ssid}" (${data.ip})`;
+          badge.textContent = `В сети ${data.ssid} · ${data.ip}`;
           setupCard.classList.add('hidden');
           toggleWrap.classList.remove('hidden');
           document.getElementById('otaBox').classList.remove('hidden');
@@ -1276,7 +1119,7 @@
 
     async function scanNetworks(forceRefresh) {
       const list = document.getElementById('netList');
-      list.innerHTML = '<div style="text-align:center; padding:14px; color:var(--muted); font-size:13px;">Поиск сетей Wi-Fi...</div>';
+      list.innerHTML = '<div style="text-align:center; padding:14px; color:var(--muted); font-size:13px;">Поиск сетей Wi-Fi</div>';
       try {
         const url = forceRefresh ? '/api/scan?refresh=1' : '/api/scan';
         for (let attempt = 0; attempt < 6; attempt++) {
@@ -1296,7 +1139,7 @@
             const row = document.createElement('div');
             row.className = 'net-item';
             const bars = net.rssi > -60 ? 'Отличный сигнал' : (net.rssi > -75 ? 'Хороший сигнал' : 'Слабый сигнал');
-            row.innerHTML = `<span>${escapeHtml(net.ssid)} ${net.open ? '' : '🔒'}</span><span style="font-size:12px; color:var(--muted);">${bars}</span>`;
+            row.innerHTML = `<span>${escapeHtml(net.ssid)}</span><span style="font-size:12px; color:var(--muted);">${bars}</span>`;
             row.onclick = () => {
               document.querySelectorAll('.net-item').forEach(el => el.classList.remove('selected'));
               row.classList.add('selected');
@@ -1359,8 +1202,8 @@
         if (data.ok) {
           alertBox.className = 'alert ok';
           alertBox.innerHTML =
-            `Готово! Сеть <b>${escapeHtml(ssid)}</b> и пароль сохранены в памяти станции.<br>` +
-            `Переключи телефон на домашний Wi-Fi и открывай страницу по адресу:<br>` +
+            `Сеть <b>${escapeHtml(ssid)}</b> и пароль сохранены в памяти станции.<br>` +
+            `Переключи телефон на домашний Wi-Fi и открывай адрес:<br>` +
             `<a class="ip-chip" href="http://${data.ip}">http://${data.ip}</a>`;
           setTimeout(loadStatus, 2500);
         } else {
@@ -1369,15 +1212,14 @@
         }
       } catch (e) {
         alertBox.className = 'alert ok';
-        alertBox.innerHTML = 'Настройки сохранены! Новый адрес страницы отобразится на экране устройства.';
+        alertBox.innerHTML = 'Настройки сохранены. Новый адрес страницы отобразится на экране устройства.';
       } finally {
         btn.disabled = false;
         btn.textContent = 'Подключить к Wi-Fi';
       }
     }
 
-    async function sendPlainToStation(ev) {
-      spawnClickSparks(ev);
+    async function sendPlainToStation() {
       const inp = document.getElementById('plainInput');
       const btn = document.getElementById('sendPlainSiteBtn');
       const alertBox = document.getElementById('plainSiteAlert');
@@ -1397,26 +1239,26 @@
         if (!res.ok) throw new Error('err');
         inp.value = '';
         alertBox.className = 'alert ok';
-        alertBox.textContent = 'Отправлено на 3-ю страницу станции!';
+        alertBox.textContent = 'Отправлено на 3-ю страницу станции.';
         loadMessages();
       } catch (e) {
         alertBox.className = 'alert err';
         alertBox.textContent = 'Не удалось отправить сообщение.';
       } finally {
         btn.disabled = false;
-        btn.textContent = '✉️ Отправить текст на 3-ю страницу';
+        btn.textContent = 'Отправить текст на 3-ю страницу';
       }
     }
 
-    async function sendLovePulse(fromMessagesPage, ev) {
-      spawnClickSparks(ev);
+    async function sendLovePulse(fromMessagesPage) {
       const btn = document.getElementById(fromMessagesPage ? 'replyHeartBtn' : 'pulseBtn');
-      const oldText = btn.textContent;
-      btn.textContent = 'Сердечко отправлено ✓';
+      const labelEl = btn.querySelector('span');
+      const oldText = labelEl ? labelEl.textContent : btn.textContent;
+      if (labelEl) labelEl.textContent = 'Сердечко отправлено';
       try {
         await fetch('/api/pulse?reply=1', { method: 'POST' });
       } catch (e) {}
-      setTimeout(() => { btn.textContent = oldText; }, 1800);
+      setTimeout(() => { if (labelEl) labelEl.textContent = oldText; }, 1800);
     }
 
     async function triggerOtaCheck() {
@@ -1438,10 +1280,10 @@
           if (st.code === 1) continue;
           if (st.code === 2) {
             alertBox.className = 'alert ok';
-            alertBox.textContent = 'Установлена самая свежая версия прошивки ✓';
+            alertBox.textContent = 'Установлена самая свежая версия прошивки.';
           } else if (st.code === 4) {
             alertBox.className = 'alert ok';
-            alertBox.textContent = `Найдена новая версия v${st.ver}! Станция обновляется...`;
+            alertBox.textContent = `Найдена новая версия v${st.ver}. Станция обновляется.`;
           } else {
             alertBox.className = 'alert err';
             alertBox.textContent = 'Файл firmware.bin ещё не опубликован на GitHub или сеть недоступна.';
@@ -1453,7 +1295,7 @@
         alertBox.textContent = 'Не удалось связаться со станцией.';
       } finally {
         btn.disabled = false;
-        btn.textContent = '🔄 Проверить обновление с GitHub';
+        btn.textContent = 'Проверить обновление с GitHub';
       }
     }
 
@@ -1466,12 +1308,12 @@
         if (!el) return;
         if (w.valid) {
           const sign = w.temp > 0 ? '+' : '';
-          el.textContent = `${w.city} ${sign}${w.temp}°C (${w.desc})`;
+          el.textContent = `${w.city} · ${sign}${w.temp}°C, ${w.desc.toLowerCase()}`;
         } else {
-          el.textContent = `${w.city || 'Москва'}: —`;
+          el.textContent = `${w.city || 'Москва'} · —`;
         }
         if (moodEl && w.mood) {
-          moodEl.textContent = w.mood;
+          moodEl.textContent = w.mood.replace(/\s*❤\s*$/g, '');
         }
       } catch (e) {}
     }
@@ -1534,7 +1376,7 @@
         });
         inp.value = resolvedName;
         alertBox.className = 'alert ok';
-        alertBox.textContent = `Город "${resolvedName}" сохранён! Погода обновится через пару секунд.`;
+        alertBox.textContent = `Город «${resolvedName}» сохранён. Погода обновится через пару секунд.`;
         setTimeout(loadWeather, 2500);
       } catch (e) {
         alertBox.className = 'alert err';
