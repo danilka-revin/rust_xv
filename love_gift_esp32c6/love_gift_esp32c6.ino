@@ -2054,7 +2054,7 @@ void drawMyStatusStatic() {
   if (myStatusEpoch > 1700000000UL) {
     char tmBuf[40];
     formatMsgTimestamp(myStatusEpoch, tmBuf, sizeof(tmBuf));
-    char sub[52];
+    char sub[64];
     snprintf(sub, sizeof(sub), "Обновлено %s", tmBuf);
     drawCenteredUTF8(tft, 168, sub, COL_MUTED, COL_BG, 1);
   } else {
