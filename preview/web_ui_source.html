@@ -756,11 +756,11 @@
       <div class="input-wrap" style="margin-bottom:16px;">
         <select class="select" id="tzSelect">
           <option value="2">Калининград (UTC+2)</option>
-          <option value="3" selected>Москва / Санкт-Петербург (UTC+3)</option>
+          <option value="3">Москва / Санкт-Петербург (UTC+3)</option>
           <option value="4">Самара (UTC+4)</option>
           <option value="5">Екатеринбург (UTC+5)</option>
           <option value="6">Омск (UTC+6)</option>
-          <option value="7">Новосибирск / Красноярск (UTC+7)</option>
+          <option value="7" selected>Красноярск / Новосибирск (UTC+7)</option>
           <option value="8">Иркутск (UTC+8)</option>
           <option value="9">Якутск (UTC+9)</option>
           <option value="10">Владивосток (UTC+10)</option>
@@ -778,7 +778,7 @@
         <div style="margin-bottom:16px; padding-bottom:16px; border-bottom:1px solid var(--border);">
           <label class="field-label" for="weatherCityInput">Город для 4-й страницы погоды</label>
           <div style="display:flex; gap:8px;">
-            <input class="input" id="weatherCityInput" type="text" value="Москва" placeholder="Казань">
+            <input class="input" id="weatherCityInput" type="text" value="Красноярск" placeholder="Красноярск">
             <button type="button" class="btn btn-soft" style="width:auto; padding:0 16px; height:40px; white-space:nowrap;" id="saveCityBtn" onclick="saveWeatherCity()">
               Сохранить
             </button>
@@ -893,7 +893,7 @@
   </div>
 
   <script>
-    let tzOffsetHours = 3;
+    let tzOffsetHours = 7;
     let activePage = 1;
     let selectedCardIdx = 0;
     let lastCardSig = '';
@@ -1241,7 +1241,7 @@
     async function connectWifi() {
       const ssid = document.getElementById('ssidInput').value.trim();
       const pass = document.getElementById('passInput').value;
-      const tz = parseInt(document.getElementById('tzSelect').value, 10) || 3;
+      const tz = parseInt(document.getElementById('tzSelect').value, 10) || 7;
       const alertBox = document.getElementById('wifiAlert');
       const btn = document.getElementById('saveWifiBtn');
 
@@ -1419,7 +1419,7 @@
           const sign = w.temp > 0 ? '+' : '';
           el.textContent = `${w.city} · ${sign}${w.temp}°C, ${w.desc.toLowerCase()}`;
         } else {
-          el.textContent = `${w.city || 'Москва'} · —`;
+          el.textContent = `${w.city || 'Красноярск'} · —`;
         }
         if (moodEl && w.mood) {
           moodEl.textContent = w.mood.replace(/\s*❤\s*$/g, '');
@@ -1440,6 +1440,7 @@
       alertBox.style.display = 'none';
 
       const fallbackCoords = {
+        'красноярск': [56.0153, 92.8932],
         'москва': [55.7558, 37.6173],
         'санкт-петербург': [59.9343, 30.3351],
         'казань': [55.7961, 49.1064],

