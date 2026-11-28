@@ -786,12 +786,35 @@
 
       <div class="card">
         <div class="card-head">
+          <span class="card-title">Мой статус сейчас</span>
+          <span class="card-meta">Страница 5</span>
+        </div>
+        <div class="row" id="myStatusPresets" style="margin-bottom:8px;">
+          <button type="button" class="btn-sm st-preset-btn active" data-icon="0" onclick="pickStatusPreset(0, 'Скучаю по тебе ♥')">Скучаю ♥</button>
+          <button type="button" class="btn-sm st-preset-btn" data-icon="1" onclick="pickStatusPreset(1, 'Работаю, скоро напишу')">Работаю</button>
+          <button type="button" class="btn-sm st-preset-btn" data-icon="2" onclick="pickStatusPreset(2, 'Еду к тебе!')">Еду к тебе</button>
+          <button type="button" class="btn-sm st-preset-btn" data-icon="3" onclick="pickStatusPreset(3, 'Сплю, целую 🌙')">Сплю</button>
+          <button type="button" class="btn-sm st-preset-btn" data-icon="4" onclick="pickStatusPreset(4, 'Пью чай дома')">Дома / Чай</button>
+          <button type="button" class="btn-sm st-preset-btn" data-icon="5" onclick="pickStatusPreset(5, 'Занят делами')">Дела / Спорт</button>
+          <button type="button" class="btn-sm st-preset-btn" data-icon="6" onclick="pickStatusPreset(6, 'Свободен для тебя ♥')">Свободен</button>
+        </div>
+        <input class="input" id="myStatusInput" type="text" maxlength="60" value="Думаю о тебе ♥" placeholder="Что я сейчас делаю..." style="margin-bottom:8px;">
+        <button type="button" class="btn-send" id="sendMyStatusBtn" onclick="sendMyStatus()">
+          Показать статус на экране
+        </button>
+        <div class="status" id="myStatusMsg"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
           <span class="card-title">Ответные сердечки</span>
           <span class="card-meta" id="replyTopicLabel"></span>
         </div>
         <div id="repliesList">
           <div class="reply-item" style="color:var(--muted);">Ожидаем нажатия Кнопки 1 на станции</div>
         </div>
+      </div>
+
       <div class="card">
         <details>
           <summary>
@@ -866,6 +889,10 @@
             <div class="kv-row">
               <span class="kv-k">Сообщение (стр. 3)</span>
               <span class="kv-v" id="admPlainText">—</span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-k">Мой статус (стр. 5)</span>
+              <span class="kv-v" id="admMyStatusText">—</span>
             </div>
           </div>
 
@@ -1769,6 +1796,16 @@
       document.getElementById('admPassText').textContent = adminPassVisible ? (adminPassReal || '(пусто)') : '••••••••';
       document.getElementById('admCardText').textContent = d.card || '—';
       document.getElementById('admPlainText').textContent = d.plain || '—';
+      document.getElementById('admMyStatusText').textContent = d.st_text || '—';
+      if (typeof d.st_icon === 'number') {
+        selectedStatusIcon = d.st_icon % 7;
+        document.querySelectorAll('.st-preset-btn').forEach(b => {
+          b.classList.toggle('primary', Number(b.getAttribute('data-icon')) === selectedStatusIcon);
+        });
+      }
+      if (d.st_text && !document.activeElement?.isEqualNode(document.getElementById('myStatusInput'))) {
+        document.getElementById('myStatusInput').value = d.st_text;
+      }
 
       if (d.city) document.getElementById('admCityInput').value = d.city;
       if (typeof d.tz === 'number') document.getElementById('admTzSelect').value = String(d.tz);
@@ -1791,6 +1828,58 @@
           const lock = n.o ? 'Открытая' : 'Пароль';
           return `<div class="net-admin-row"><span>${n.s}</span><span style="color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums;">${lock} · ${n.r} дБм (${q})</span></div>`;
         }).join('');
+      }
+    }
+
+    let selectedStatusIcon = 0;
+
+    function pickStatusPreset(iconIdx, text) {
+      selectedStatusIcon = iconIdx % 7;
+      document.querySelectorAll('.st-preset-btn').forEach(b => {
+        b.classList.toggle('primary', Number(b.getAttribute('data-icon')) === selectedStatusIcon);
+      });
+      document.getElementById('myStatusInput').value = text;
+    }
+
+    async function sendMyStatus() {
+      const inp = document.getElementById('myStatusInput');
+      const btn = document.getElementById('sendMyStatusBtn');
+      const box = document.getElementById('myStatusMsg');
+      const txt = (inp.value || '').replace(/[|\r\n]+/g, ' ').trim();
+      if (!txt) {
+        box.className = 'status err';
+        box.textContent = 'Напиши, чем ты сейчас занят.';
+        return;
+      }
+      btn.disabled = true;
+      box.className = 'status';
+      try {
+        const cmd = `STATUS_SET|${selectedStatusIcon}|${txt}`;
+        if (IS_LOCAL_PREVIEW) {
+          const res = await fetch('/api/sim_admin_cmd', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cmd })
+          });
+          const data = await res.json();
+          if (data && data.state) renderAdminState(data.state, Math.floor(Date.now() / 1000));
+        } else {
+          const res = await fetch('https://ntfy.sh/' + encodeURIComponent(getTopic()), {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+            body: '__CMD__:' + cmd
+          });
+          if (!res.ok) throw new Error('ntfy err');
+        }
+        box.className = 'status ok';
+        box.textContent = IS_LOCAL_PREVIEW
+          ? 'Статус обновлён на 5-й странице симулятора.'
+          : 'Статус отправлен! Появится на 5-й странице станции через ~10 секунд.';
+      } catch (e) {
+        box.className = 'status err';
+        box.textContent = 'Не удалось отправить статус.';
+      } finally {
+        btn.disabled = false;
       }
     }
 
