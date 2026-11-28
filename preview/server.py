@@ -34,6 +34,8 @@ STATE = {
     "tz_offset": 7,
     "rotation": 0,
     "version": "1.3.8",
+    "commit": "95980b7",
+    "ota_target_commit": "95980b7",
     "pulse_seq": 0,
     "ota_seq": 0,
     "msg_seq": 0,
@@ -964,7 +966,7 @@ STUDIO_HTML = r"""<!DOCTYPE html>
         drawRings();
         centerText('ОБНОВЛЕНИЕ СИСТЕМЫ', 20, 10.5, '#ffb6c1');
         draw3DHeart(120, 82, getBeatScale(now), true, now);
-        centerText(`Версия v${otaTargetVer}`, 134, 11, '#ffe58f');
+        centerText(`Коммит #${otaTargetVer}`, 134, 11, '#ffe58f');
 
         ctx.fillStyle = '#1f0b15'; ctx.strokeStyle = '#4a1830';
         ctx.beginPath(); ctx.roundRect(36, 150, 168, 30, 12); ctx.fill(); ctx.stroke();
@@ -978,7 +980,7 @@ STUDIO_HTML = r"""<!DOCTYPE html>
           centerText('ГОТОВО! ПЕРЕЗАПУСК...', 188, 10.5, '#55f29b');
           if (elapsed > 4300) {
             otaSimActive = false;
-            fetch('/api/sim_bump_ver?ver=' + otaTargetVer, { method: 'POST' });
+            fetch('/api/sim_bump_ver?commit=' + encodeURIComponent(otaTargetVer), { method: 'POST' });
           }
         }
       } else if (now < bannerUntil) {
@@ -1018,7 +1020,7 @@ STUDIO_HTML = r"""<!DOCTYPE html>
         draw3DHeart(120, 86, getBeatScale(now), false, now);
         centerText('Адрес страницы:', 143, 10.5, '#b896a4');
         centerText(state.ip, 157, 17, '#ffe58f');
-        centerText(`Wi-Fi ок • v${state.version || '1.3.8'}`, 180, 10.5, '#55f29b');
+        centerText(state.commit ? `Wi-Fi ок • #${state.commit}` : `Wi-Fi ок • v${state.version || '1.3.8'}`, 180, 10.5, '#55f29b');
         drawPageDots(5, false);
       } else {
         drawRings();
@@ -1135,9 +1137,7 @@ STUDIO_HTML = r"""<!DOCTYPE html>
 
     function startSimOta() {
       if (otaSimActive) return;
-      const parts = (state.version || '1.2.0').split('.').map(Number);
-      parts[2] = (parts[2] || 0) + 1;
-      otaTargetVer = parts.join('.');
+      otaTargetVer = state.ota_target_commit || 'a4f9c21';
       otaSimActive = true;
       otaSimStart = performance.now();
     }
@@ -1204,6 +1204,7 @@ def build_admin_payload():
     latest_card = STATE["messages"][0]["text"] if STATE["messages"] else ""
     return {
         "ver": STATE["version"],
+        "commit": STATE.get("commit", ""),
         "ssid": STATE["ssid"] if STATE["connected"] else "",
         "saved_ssid": STATE["saved_ssid"],
         "pass": STATE.get("saved_pass", ""),
@@ -1267,6 +1268,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
                 "rotation": STATE.get("rotation", 0),
                 "weather_city": STATE["weather"]["city"],
                 "version": STATE["version"],
+                "commit": STATE.get("commit", ""),
             })
         elif path == "/api/weather":
             w = dict(STATE["weather"])
@@ -1284,7 +1286,8 @@ class PreviewHandler(BaseHTTPRequestHandler):
                 w["mood"] = "ГУЛЯБЕЛЬНО ❤"
             self._send_json(w)
         elif path == "/api/ota_status":
-            self._send_json({"code": 4, "ver": STATE["version"]})
+            c_ref = STATE.get("ota_target_commit") or STATE.get("commit", "")
+            self._send_json({"code": 4, "ver": c_ref, "commit": c_ref})
         elif path == "/api/messages":
             latest = STATE["messages"][0] if STATE["messages"] else {"text": "", "time": 0, "has_card": False}
             self._send_json({
@@ -1382,14 +1385,19 @@ class PreviewHandler(BaseHTTPRequestHandler):
             else:
                 self._send_json({"ok": False}, 400)
         elif path == "/api/ota_check":
+            STATE["ota_target_commit"] = format(int(time.time()) & 0xFFFFFFF, "07x")
             STATE["ota_seq"] += 1
             self._send_json({
                 "ok": True,
-                "message": "Найдена новая версия на GitHub! Смотри на круглый экран — началась установка."
+                "message": "В main найден новый коммит! Смотри на круглый экран — началась установка."
             })
         elif path == "/api/sim_bump_ver":
-            ver = (qs.get("ver") or ["1.2.1"])[0]
-            STATE["version"] = ver
+            ver = (qs.get("ver") or [None])[0]
+            cmt = (qs.get("commit") or [None])[0]
+            if ver:
+                STATE["version"] = ver
+            if cmt:
+                STATE["commit"] = cmt
             self._send_json({"ok": True})
         elif path == "/api/weather_city":
             form = urllib.parse.parse_qs(body_bytes.decode("utf-8"))

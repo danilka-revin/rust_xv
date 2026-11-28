@@ -1198,8 +1198,9 @@
         if (typeof data.rotation === 'number') {
           updateRotButtons(data.rotation);
         }
-        if (data.version) {
-          document.getElementById('fwVerText').textContent = 'v' + data.version;
+        if (data.version || data.commit) {
+          const cStr = data.commit ? ` · #${data.commit}` : '';
+          document.getElementById('fwVerText').textContent = (data.version ? 'v' + data.version : 'main') + cStr;
         }
         if (data.weather_city && document.getElementById('weatherCityInput')) {
           document.getElementById('weatherCityInput').value = data.weather_city;
@@ -1451,15 +1452,18 @@
           const stRes = await fetch('/api/ota_status');
           const st = await stRes.json();
           if (st.code === 1) continue;
+          const refLabel = st.commit || st.ver || 'main';
           if (st.code === 2) {
             alertBox.className = 'alert ok';
-            alertBox.textContent = 'Установлена самая свежая версия прошивки.';
+            alertBox.textContent = st.commit
+              ? `Установлен актуальный коммит main (#${st.commit}), отличий в прошивке нет.`
+              : 'Установлена актуальная прошивка из main.';
           } else if (st.code === 4) {
             alertBox.className = 'alert ok';
-            alertBox.textContent = `Найдена новая версия v${st.ver}. Станция обновляется.`;
+            alertBox.textContent = `В main найден новый коммит (#${refLabel}). Станция прошивается и перезапустится.`;
           } else {
             alertBox.className = 'alert err';
-            alertBox.textContent = 'Файл firmware.bin ещё не опубликован на GitHub или сеть недоступна.';
+            alertBox.textContent = 'Файл ota/firmware.bin не найден в main или GitHub API временно недоступен.';
           }
           break;
         }
