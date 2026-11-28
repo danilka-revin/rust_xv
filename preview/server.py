@@ -231,8 +231,8 @@ STUDIO_HTML = r"""<!DOCTYPE html>
 <body>
   <div class="top-bar">
     <div>
-      <h1>Станция отношений v1.3.6 — 4 страницы + Погода «ГУЛЯБЕЛЬНО ❤» + Открытки</h1>
-      <p>Нажимай Кнопку 2 для листания 4 страниц (Таймер → Послания → IP → Погода), а справа создавай открытки или настраивай город!</p>
+      <h1>Станция отношений v1.3.8 — 5 страниц + Красноярск + Удалённая админка</h1>
+      <p>Нажимай Кнопку 2 для листания 5 страниц, задерживай Кнопку 1 на 10 сек для ответного сердечка</p>
     </div>
     <div class="mode-btns">
       <button class="ctrl-btn" onclick="forceApMode()">📡 1-й запуск ("love")</button>
@@ -249,12 +249,13 @@ STUDIO_HTML = r"""<!DOCTYPE html>
         <canvas id="tft" width="240" height="240"></canvas>
       </div>
       <div class="hw-buttons">
-        <button class="hw-btn" onclick="pressBtn1(true)">❤️ Кнопка 1 (D0)<br><span style="font-weight:400;font-size:11px;opacity:0.8;">Ответ сердечком</span></button>
-        <button class="hw-btn" onmousedown="btn2Down(event)" onmouseup="btn2Up(event)" ontouchstart="btn2Down(event)" ontouchend="btn2Up(event)">🔄 Кнопка 2 (D1)<br><span style="font-weight:400;font-size:11px;opacity:0.8;">Анимация 4 страниц</span></button>
+        <button class="hw-btn" onmousedown="btn1Down(event)" onmouseup="btn1Up(event)" onmouseleave="btn1Up(event)" ontouchstart="btn1Down(event)" ontouchend="btn1Up(event)" ontouchcancel="btn1Up(event)">❤️ Кнопка 1 (D0)<br><span style="font-weight:400;font-size:11px;opacity:0.8;">Зажми на 10 сек — ♥</span></button>
+        <button class="hw-btn" onmousedown="btn2Down(event)" onmouseup="btn2Up(event)" onmouseleave="btn2Up(event)" ontouchstart="btn2Down(event)" ontouchend="btn2Up(event)" ontouchcancel="btn2Up(event)">🔄 Кнопка 2 (D1)<br><span style="font-weight:400;font-size:11px;opacity:0.8;">Листание 5 страниц</span></button>
       </div>
       <div class="hw-hint">
-        • Нажми <b>Кнопку 2 (D1)</b> — листай 4 страницы: Таймер → Послания → IP/Сердце → Погода («ГУЛЯБЕЛЬНО ❤»).<br>
-        • Справа открыт твой <b>🎨 Конструктор открыток</b> или <b>📱 Сайт станции</b>!
+        • <b>Зажми Кнопку 1 (D0) на 10 сек</b> — увидишь таймер удержания и переливающийся прогресс-бар отправки сердечка (отпустишь раньше — отмена).<br>
+        • Нажми <b>Кнопку 2 (D1)</b> — листай 5 страниц: Таймер → Открытка → Текст → Погода → IP/Сердце.<br>
+        • Справа открыт <b>🎨 Конструктор открыток + Админка</b> или <b>📱 Сайт станции</b>!
       </div>
     </div>
 
@@ -291,10 +292,10 @@ STUDIO_HTML = r"""<!DOCTYPE html>
     const pctx = prevFrameOff.getContext('2d');
 
     let state = {
-      connected: true, ssid: 'Home_WiFi_5G', ip: '192.168.1.48', tz_offset: 3,
+      connected: true, ssid: 'Home_WiFi_5G', ip: '192.168.1.48', tz_offset: 7,
       version: '1.3.8', pulse_seq: 0, ota_seq: 0, msg_seq: 0, plain_seq: 0, unread: false, plain_unread: false,
       plain_text: 'Люблю тебя без повода ❤️', plain_time: 1795785300,
-      weather: { valid: true, city: 'Москва', temp: 12, feels: 10, wind: 3, code: 2, desc: 'Переменная облачность', walkable: true },
+      weather: { valid: true, city: 'Красноярск', temp: -6, feels: -10, wind: 3, code: 2, desc: 'Переменная облачность', walkable: true },
       messages: [{ text: 'Я всегда рядом с тобой ❤️', time: 1795785000, has_card: false }]
     };
     let lastPulseSeq = 0, lastOtaSeq = 0, lastMsgSeq = 0, lastPlainSeq = 0;
@@ -317,6 +318,10 @@ STUDIO_HTML = r"""<!DOCTYPE html>
     let transStartMs = 0;
 
     const phrases = ['ЛЮБЛЮ ТЕБЯ', 'ВСЕГДА РЯДОМ', 'ТЫ ЛУЧШАЯ', 'НАШЕ ВРЕМЯ', 'КРЕПКО ОБНИМАЮ', 'МОЯ РАДОСТЬ'];
+    const BTN1_HEART_HOLD_MS = 10000;
+    const BTN1_HOLD_UI_DELAY_MS = 120;
+    let b1DownAt = 0;
+    let b1HoldCompleted = false;
     let b2DownAt = 0;
 
     const SHIMMER_PALETTE = [
@@ -910,6 +915,48 @@ STUDIO_HTML = r"""<!DOCTYPE html>
       ctx.fillStyle = '#000000';
       ctx.fillRect(0, 0, 240, 240);
 
+      if (b1DownAt > 0 && !b1HoldCompleted && !otaSimActive && now >= bannerUntil) {
+        const heldMs = now - b1DownAt;
+        if (heldMs >= BTN1_HOLD_UI_DELAY_MS) {
+          if (heldMs >= BTN1_HEART_HOLD_MS) {
+            b1HoldCompleted = true;
+            b1DownAt = 0;
+            pressBtn1(true);
+          } else {
+            const p = Math.min(1, heldMs / BTN1_HEART_HOLD_MS);
+            const secLeft = Math.ceil((BTN1_HEART_HOLD_MS - heldMs) / 1000);
+            ctx.fillStyle = '#080507';
+            ctx.fillRect(0, 0, 240, 240);
+            drawRings();
+            centerText('ОТПРАВИТЬ СЕРДЕЧКО?', 22, 10.5, '#ffb6c1');
+            draw3DHeart(120, 82, getBeatScale(now) * (0.78 + 0.28 * p), p >= 0.2, now);
+            centerText(`Удерживай: ${secLeft} с`, 134, 11.5, '#ffe58f');
+
+            const bx = 38, by = 154, bw = 164, bh = 22;
+            ctx.fillStyle = '#1f0b15';
+            ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 11); ctx.fill();
+            const fillW = Math.round((bw - 6) * p);
+            if (fillW > 0) {
+              const g = ctx.createLinearGradient(bx + 3, 0, bx + 3 + fillW, 0);
+              const [r1, g1, b1] = evalShimmerRGB(now * 0.0008);
+              const [r2, g2, b2] = evalShimmerRGB(now * 0.0008 + 0.45);
+              g.addColorStop(0, `rgb(${r1},${g1},${b1})`);
+              g.addColorStop(1, `rgb(${r2},${g2},${b2})`);
+              ctx.fillStyle = g;
+              ctx.beginPath(); ctx.roundRect(bx + 3, by + 3, fillW, bh - 6, 8); ctx.fill();
+            }
+            const [sr, sg, sb] = evalShimmerRGB(now * 0.0012);
+            ctx.strokeStyle = `rgb(${sr},${sg},${sb})`;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 11); ctx.stroke();
+
+            centerText('Отпусти — отмена', 194, 10.5, '#b896a4');
+            requestAnimationFrame(renderLoop);
+            return;
+          }
+        }
+      }
+
       if (otaSimActive) {
         const elapsed = now - otaSimStart;
         const pct = Math.min(100, Math.floor(elapsed / 32));
@@ -1014,6 +1061,19 @@ STUDIO_HTML = r"""<!DOCTYPE html>
       }
 
       requestAnimationFrame(renderLoop);
+    }
+
+    function btn1Down(e) {
+      if (e && e.cancelable) e.preventDefault();
+      if (otaSimActive || performance.now() < bannerUntil) return;
+      b1DownAt = performance.now();
+      b1HoldCompleted = false;
+    }
+
+    function btn1Up(e) {
+      if (e && e.cancelable) e.preventDefault();
+      b1DownAt = 0;
+      b1HoldCompleted = false;
     }
 
     async function pressBtn1(fromHw) {
