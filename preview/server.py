@@ -40,6 +40,12 @@ STATE = {
     "ota_seq": 0,
     "msg_seq": 0,
     "plain_seq": 0,
+    "status_seq": 0,
+    "my_status": {
+        "icon": 0,
+        "text": "Думаю о тебе ♥",
+        "epoch": int(time.time()) - 120,
+    },
     "unread": False,
     "plain_unread": False,
     "plain_text": "Люблю тебя без повода ❤️",
@@ -253,7 +259,7 @@ STUDIO_HTML = r"""<!DOCTYPE html>
       </div>
       <div class="hw-buttons">
         <button class="hw-btn" onmousedown="btn1Down(event)" onmouseup="btn1Up(event)" onmouseleave="btn1Up(event)" ontouchstart="btn1Down(event)" ontouchend="btn1Up(event)" ontouchcancel="btn1Up(event)">❤️ Кнопка 1 (D0)<br><span style="font-weight:400;font-size:11px;opacity:0.8;">Зажми на 10 сек — ♥</span></button>
-        <button class="hw-btn" onmousedown="btn2Down(event)" onmouseup="btn2Up(event)" onmouseleave="btn2Up(event)" ontouchstart="btn2Down(event)" ontouchend="btn2Up(event)" ontouchcancel="btn2Up(event)">🔄 Кнопка 2 (D1)<br><span style="font-weight:400;font-size:11px;opacity:0.8;">Листание 5 страниц</span></button>
+        <button class="hw-btn" onmousedown="btn2Down(event)" onmouseup="btn2Up(event)" onmouseleave="btn2Up(event)" ontouchstart="btn2Down(event)" ontouchend="btn2Up(event)" ontouchcancel="btn2Up(event)">🔄 Кнопка 2 (D1)<br><span style="font-weight:400;font-size:11px;opacity:0.8;">Листание 6 страниц</span></button>
       </div>
       <div class="hw-hint">
         • <b>Зажми Кнопку 1 (D0) на 10 сек</b> — увидишь таймер удержания и переливающийся прогресс-бар отправки сердечка (отпустишь раньше — отмена).<br>
@@ -301,8 +307,8 @@ STUDIO_HTML = r"""<!DOCTYPE html>
       weather: { valid: true, city: 'Красноярск', temp: -6, feels: -10, wind: 3, code: 2, desc: 'Переменная облачность', walkable: true },
       messages: [{ text: 'Я всегда рядом с тобой ❤️', time: 1795785000, has_card: false }]
     };
-    let lastPulseSeq = 0, lastOtaSeq = 0, lastMsgSeq = 0, lastPlainSeq = 0;
-    let screenMode = 'timer'; // 'ap' | 'timer' | 'messages' | 'text_msg' | 'weather' | 'heart_ip'
+    let lastPulseSeq = 0, lastOtaSeq = 0, lastMsgSeq = 0, lastPlainSeq = 0, lastStatusSeq = 0;
+    let screenMode = 'timer'; // 'ap' | 'timer' | 'messages' | 'text_msg' | 'weather' | 'my_status' | 'heart_ip'
     let pulseUntil = 0;
     let pulseReplyShown = false;
     let bannerUntil = 0;
@@ -548,11 +554,11 @@ STUDIO_HTML = r"""<!DOCTYPE html>
       if (onPhoto) {
         ctx.fillStyle = '#1f0b15';
         ctx.beginPath();
-        ctx.roundRect(86, y - 5, 68, 11, 5);
+        ctx.roundRect(80, y - 5, 80, 11, 5);
         ctx.fill();
       }
-      for (let i = 1; i <= 5; i++) {
-        const x = 96 + (i - 1) * 12;
+      for (let i = 1; i <= 6; i++) {
+        const x = 90 + (i - 1) * 12;
         ctx.beginPath();
         ctx.arc(x, y, 3, 0, Math.PI * 2);
         if (i === pageNum) {
@@ -567,6 +573,114 @@ STUDIO_HTML = r"""<!DOCTYPE html>
           ctx.stroke();
         }
       }
+    }
+
+    function drawMyStatusScreen(now) {
+      const st = state.my_status || { icon: 0, text: 'Думаю о тебе ♥', epoch: 0 };
+      const ic = (st.icon || 0) % 7;
+      const accents = ['#ff4977', '#ffd466', '#55f29b', '#8cb8ff', '#ff94ae', '#ffa548', '#55f29b'];
+      const accent = accents[ic];
+
+      drawRings();
+      ctx.strokeStyle = accent + '66';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(120, 120, 115, 0, Math.PI * 2); ctx.stroke();
+
+      centerText('СЕЙЧАС Я', 19, 10.5, accent);
+
+      // Анимированная иконка в зоне 92..148 x 42..86
+      const ox = 92, oy = 42;
+      ctx.save();
+      if (ic === 0) {
+        const sc = 1 + 0.14 * Math.sin(now * 0.0055);
+        const r = 8.5 * sc;
+        const cx = ox + 28, cy = oy + 20;
+        ctx.fillStyle = accent;
+        ctx.beginPath(); ctx.arc(cx - r + 2, cy - 3, r, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + r - 2, cy - 3, r, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(cx - 2 * r + 2, cy - 1); ctx.lineTo(cx + 2 * r - 2, cy - 1); ctx.lineTo(cx, cy + 2 * r - 1); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cx - r + 1, cy - 5, 2, 0, Math.PI * 2); ctx.fill();
+      } else if (ic === 1) {
+        ctx.strokeStyle = accent; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.roundRect(ox + 10, oy + 8, 36, 22, 3); ctx.stroke();
+        ctx.fillStyle = '#1f0b15'; ctx.fillRect(ox + 12, oy + 10, 32, 18);
+        ctx.fillStyle = accent; ctx.beginPath(); ctx.roundRect(ox + 6, oy + 31, 44, 5, 2); ctx.fill();
+        const la = Math.floor(now / 280) % 4;
+        for (let i = 0; i < 3; i++) {
+          ctx.fillStyle = (i === la) ? '#fff' : accent;
+          ctx.fillRect(ox + 15, oy + 14 + i * 4, (i === la) ? 22 : (14 + ((i * 5) % 10)), 1.5);
+        }
+      } else if (ic === 2) {
+        const bob = Math.sin(now * 0.015) * 1.2;
+        ctx.fillStyle = accent;
+        ctx.beginPath(); ctx.roundRect(ox + 14, oy + 18 + bob, 28, 11, 4); ctx.fill();
+        ctx.beginPath(); ctx.roundRect(ox + 19, oy + 12 + bob, 17, 8, 3); ctx.fill();
+        ctx.fillStyle = '#000';
+        ctx.fillRect(ox + 21, oy + 14 + bob, 5, 4); ctx.fillRect(ox + 28, oy + 14 + bob, 6, 4);
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(ox + 20, oy + 30, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(ox + 36, oy + 30, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffe58f'; ctx.beginPath(); ctx.arc(ox + 42, oy + 22 + bob, 2, 0, Math.PI * 2); ctx.fill();
+        const rp = Math.floor(now / 65) % 12;
+        ctx.fillStyle = '#4a1830';
+        for (let x = -rp; x < 56; x += 12) ctx.fillRect(ox + Math.max(0, x), oy + 37, 6, 1.5);
+        ctx.fillStyle = '#ff4977';
+        ctx.beginPath(); ctx.arc(ox + 28, oy + 7 + bob, 3, 0, Math.PI * 2); ctx.fill();
+      } else if (ic === 3) {
+        ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(ox + 24, oy + 22, 12, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(ox + 30, oy + 18, 10, 0, Math.PI * 2); ctx.fill();
+        const ph = Math.floor(now / 350) % 3;
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(ox + 39, oy + 11, ph === 0 ? 2 : 1, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffe58f'; ctx.beginPath(); ctx.arc(ox + 45, oy + 22, ph === 1 ? 2 : 1, 0, Math.PI * 2); ctx.fill();
+        const zOff = Math.floor(now / 180) % 6;
+        ctx.fillStyle = accent; ctx.font = 'bold 11px sans-serif'; ctx.fillText('z', ox + 36, oy + 32 - zOff);
+      } else if (ic === 4) {
+        ctx.fillStyle = accent; ctx.beginPath(); ctx.roundRect(ox + 15, oy + 20, 24, 16, 4); ctx.fill();
+        ctx.strokeStyle = accent; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(ox + 40, oy + 27, 4, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = '#b896a4'; ctx.fillRect(ox + 12, oy + 37, 30, 1.5);
+        ctx.fillStyle = '#fff';
+        for (let s = 0; s < 3; s++) {
+          const sx = ox + 20 + s * 6 + Math.sin(now * 0.006 + s * 1.5) * 2;
+          const sy = oy + 15 - (Math.floor(now / 140 + s * 3) % 7);
+          ctx.fillRect(sx, sy, 1.5, 4);
+        }
+      } else if (ic === 5) {
+        ctx.strokeStyle = '#4a1830'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(ox + 28, oy + 22, 16, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = accent; ctx.lineWidth = 2;
+        const pts = [[8,24],[18,24],[23,13],[28,33],[33,17],[38,24],[48,24]];
+        ctx.beginPath(); ctx.moveTo(ox + pts[0][0], oy + pts[0][1]);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(ox + pts[i][0], oy + pts[i][1]);
+        ctx.stroke();
+        const dx = 8 + (Math.floor(now / 45) % 41);
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(ox + dx, oy + 24, 2, 0, Math.PI * 2); ctx.fill();
+      } else {
+        const wave = (now % 1200) / 1200;
+        ctx.strokeStyle = `rgba(85, 242, 155, ${1 - wave})`; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(ox + 28, oy + 22, 11 + wave * 9, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = '#ff4977';
+        ctx.beginPath(); ctx.arc(ox + 23, oy + 19, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(ox + 33, oy + 19, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(ox + 17, oy + 21); ctx.lineTo(ox + 39, oy + 21); ctx.lineTo(ox + 28, oy + 33); ctx.fill();
+      }
+      ctx.restore();
+
+      ctx.fillStyle = '#1f0b15'; ctx.strokeStyle = accent + 'aa'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.roundRect(26, 94, 188, 64, 14); ctx.fill(); ctx.stroke();
+
+      const txt = st.text || 'Думаю о тебе ♥';
+      const sc = txt.length <= 14 ? 15 : 12;
+      const lines = wrapLines(txt, txt.length <= 14 ? 14 : 24, 3);
+      const step = sc + 5;
+      const startY = 94 + (64 - lines.length * step) / 2;
+      lines.forEach((ln, i) => centerText(ln, startY + i * step, sc, '#ffffff'));
+
+      let tmLabel = 'Статус любимого ♥';
+      if (st.epoch && st.epoch > 1700000000) {
+        const d = new Date(st.epoch * 1000);
+        tmLabel = 'Обновлено в ' + d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+      }
+      centerText(tmLabel, 168, 10.5, '#b896a4');
+      drawPageDots(5, false);
     }
 
     function drawWeatherIconJS(nowMs, code) {
@@ -902,8 +1016,10 @@ STUDIO_HTML = r"""<!DOCTYPE html>
           draw3DHeart(120, 86, getBeatScale(now) * elastic, false, now);
           centerText('Адрес страницы:', 143, 10.5, '#b896a4');
           centerText(state.ip, 157, 17, '#ffe58f');
-          centerText(`Wi-Fi ок • v${state.version || '1.3.8'}`, 180, 10.5, '#55f29b');
-          drawPageDots(5, false);
+          centerText(`Wi-Fi ок • #${state.commit || '95980b7'}`, 180, 10.5, '#55f29b');
+          drawPageDots(6, false);
+        } else if (screenMode === 'my_status') {
+          drawMyStatusScreen(now);
         } else if (screenMode === 'weather') {
           drawWeatherScreen(now);
         } else {
@@ -1014,6 +1130,8 @@ STUDIO_HTML = r"""<!DOCTYPE html>
         drawMessagesScreen(now, dtSec, true);
       } else if (screenMode === 'weather') {
         drawWeatherScreen(now);
+      } else if (screenMode === 'my_status') {
+        drawMyStatusScreen(now);
       } else if (screenMode === 'heart_ip') {
         drawRings();
         centerText('СТАНЦИЯ ОТНОШЕНИЙ', 19, 10.5, '#ffb6c1');
@@ -1021,7 +1139,7 @@ STUDIO_HTML = r"""<!DOCTYPE html>
         centerText('Адрес страницы:', 143, 10.5, '#b896a4');
         centerText(state.ip, 157, 17, '#ffe58f');
         centerText(state.commit ? `Wi-Fi ок • #${state.commit}` : `Wi-Fi ок • v${state.version || '1.3.8'}`, 180, 10.5, '#55f29b');
-        drawPageDots(5, false);
+        drawPageDots(6, false);
       } else {
         drawRings();
         drawMiniHeartSmooth(120, 31, now, false);
@@ -1112,6 +1230,8 @@ STUDIO_HTML = r"""<!DOCTYPE html>
         } else if (cur === 'text_msg') {
           beginTransition('weather');
         } else if (cur === 'weather') {
+          beginTransition('my_status');
+        } else if (cur === 'my_status') {
           beginTransition('heart_ip');
         } else {
           beginTransition('timer');
@@ -1173,6 +1293,10 @@ STUDIO_HTML = r"""<!DOCTYPE html>
           lastPlainSeq = d.plain_seq;
           if (d.connected) beginTransition('text_msg');
         }
+        if (d.status_seq !== lastStatusSeq) {
+          lastStatusSeq = d.status_seq;
+          if (d.connected) beginTransition('my_status');
+        }
       } catch (e) {}
     }
 
@@ -1212,6 +1336,8 @@ def build_admin_payload():
         "city": STATE["weather"]["city"],
         "plain": STATE.get("plain_text", ""),
         "card": latest_card,
+        "st_icon": STATE["my_status"]["icon"],
+        "st_text": STATE["my_status"]["text"],
         "rssi": -48 if STATE["connected"] else 0,
         "heap": 148200,
         "up": int(time.time() - START_BOOT_TS),
@@ -1288,6 +1414,8 @@ class PreviewHandler(BaseHTTPRequestHandler):
         elif path == "/api/ota_status":
             c_ref = STATE.get("ota_target_commit") or STATE.get("commit", "")
             self._send_json({"code": 4, "ver": c_ref, "commit": c_ref})
+        elif path == "/api/my_status":
+            self._send_json(STATE["my_status"])
         elif path == "/api/messages":
             latest = STATE["messages"][0] if STATE["messages"] else {"text": "", "time": 0, "has_card": False}
             self._send_json({
@@ -1420,6 +1548,13 @@ class PreviewHandler(BaseHTTPRequestHandler):
                     STATE["ota_seq"] += 1
                 elif cmd.startswith("ROT|"):
                     STATE["rotation"] = int(cmd.split("|")[1]) & 3
+                elif cmd.startswith("STATUS_SET|"):
+                    parts = cmd.split("|", 2)
+                    if len(parts) >= 3:
+                        STATE["my_status"]["icon"] = int(parts[1]) % 7
+                        STATE["my_status"]["text"] = parts[2].strip() or "Думаю о тебе ♥"
+                        STATE["my_status"]["epoch"] = int(time.time())
+                        STATE["status_seq"] += 1
                 elif cmd.startswith("CITY|"):
                     parts = cmd.split("|")
                     if len(parts) >= 5:

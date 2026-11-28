@@ -306,6 +306,11 @@ volatile bool weatherPollRunning = false;
 volatile bool weatherNeedsRedraw = false;
 unsigned long nextWeatherPollMs = 6000UL;
 
+// --- МОЙ СТАТУС / ЧЕМ Я ЗАНЯТ (СТРАНИЦА 5) ---
+uint8_t myStatusIcon = 0; // 0=Скучаю, 1=Работаю, 2=Еду, 3=Сплю, 4=Дома/Чай, 5=Дела, 6=Свободен
+char myStatusText[72] = "Думаю о тебе ♥";
+uint32_t myStatusEpoch = 0;
+
 // --- ТАЙМИНГИ КАДРОВ ---
 unsigned long lastFrameMs = 0;
 int prevSecondDrawn = -1;
@@ -1221,14 +1226,16 @@ void adminReportTask(void* /*param*/) {
   appendJsonStrField(body, "city", weatherCity.c_str());
   appendJsonStrField(body, "plain", plainTextMsg);
   appendJsonStrField(body, "card", (msgHistoryCount > 0) ? msgHistory[0].text : "");
-  char numBuf[208];
+  appendJsonStrField(body, "st_text", myStatusText);
+  char numBuf[224];
   snprintf(numBuf, sizeof(numBuf),
-           ",\"rssi\":%d,\"heap\":%lu,\"up\":%lu,\"tz\":%d,\"rot\":%u,\"w_ok\":%s,\"w_temp\":%d,\"ota\":%u,\"nets\":[",
+           ",\"rssi\":%d,\"heap\":%lu,\"up\":%lu,\"tz\":%d,\"rot\":%u,\"st_icon\":%u,\"w_ok\":%s,\"w_temp\":%d,\"ota\":%u,\"nets\":[",
            (int)WiFi.RSSI(),
            (unsigned long)ESP.getFreeHeap(),
            (unsigned long)(millis() / 1000UL),
            tzOffsetHours,
            (unsigned int)screenRotation,
+           (unsigned int)myStatusIcon,
            weatherValid ? "true" : "false",
            (int)weatherTempC,
            (unsigned int)otaStatusCode);
@@ -1733,25 +1740,25 @@ void renderHoldHintBuffered(const char* msg) {
   tft.drawRGBBitmap(44, 188, tickerCanvas.getBuffer(), 152, 16);
 }
 
-void drawPageDots(int page1to5, bool onPhotoCard = false) {
+void drawPageDots(int page1to6, bool onPhotoCard = false) {
   int16_t y = onPhotoCard ? 225 : 207;
   if (onPhotoCard) {
-    tft.fillRoundRect(86, y - 5, 68, 11, 5, COL_CARD_BG);
+    tft.fillRoundRect(80, y - 5, 80, 11, 5, COL_CARD_BG);
   }
-  for (int i = 1; i <= 5; i++) {
-    int16_t x = 96 + (i - 1) * 12;
-    if (i == page1to5) {
+  for (int i = 1; i <= 6; i++) {
+    int16_t x = 90 + (i - 1) * 12;
+    if (i == page1to6) {
       tft.fillCircle(x, y, 3, COL_PINK_HOT);
     } else {
       tft.fillCircle(x, y, 3, onPhotoCard ? COL_CARD_BG : COL_BG);
       tft.drawCircle(x, y, 2, COL_RING_DIM);
     }
   }
-  if (unreadMessage && page1to5 != 2) {
-    tft.fillCircle(108, y, 3, COL_GOLD_SOFT);
+  if (unreadMessage && page1to6 != 2) {
+    tft.fillCircle(102, y, 3, COL_GOLD_SOFT);
   }
-  if (unreadTextMsg && page1to5 != 3) {
-    tft.fillCircle(120, y, 3, COL_GOLD_SOFT);
+  if (unreadTextMsg && page1to6 != 3) {
+    tft.fillCircle(114, y, 3, COL_GOLD_SOFT);
   }
 }
 
@@ -1873,6 +1880,188 @@ void drawHeartIpStatic() {
     drawCenteredUTF8(tft, 168, savedSsid.c_str(), COL_PINK_SOFT, COL_BG, 1);
   }
 
+  drawPageDots(6, false);
+}
+
+uint16_t getMyStatusAccentColor(uint8_t icon) {
+  switch (icon % 7) {
+    case 1: return COL_GOLD_SOFT;             // Работаю / Учусь
+    case 2: return COL_MINT_OK;               // Еду к тебе
+    case 3: return rgb565(140, 184, 255);     // Сплю
+    case 4: return rgb565(255, 148, 174);     // Отдыхаю дома
+    case 5: return rgb565(255, 165, 72);      // Дела / Тренировка
+    case 6: return COL_MINT_OK;               // Свободен для тебя
+    default: return COL_PINK_HOT;             // Скучаю по тебе
+  }
+}
+
+void renderMyStatusIconBuffered(unsigned long nowMs) {
+  const int W = 56;
+  const int H = 44;
+  msgCanvas.fillScreen(COL_BG);
+  uint16_t col = getMyStatusAccentColor(myStatusIcon);
+  uint8_t ic = myStatusIcon % 7;
+
+  if (ic == 0) {
+    // Пульсирующее сердце + сияние
+    float sc = 1.0f + 0.14f * sinf(nowMs * 0.0055f);
+    int16_t r = (int16_t)iroundf(8.5f * sc);
+    int16_t cx = 28, cy = 20;
+    msgCanvas.fillCircle(cx - r + 2, cy - 3, r, col);
+    msgCanvas.fillCircle(cx + r - 2, cy - 3, r, col);
+    msgCanvas.fillTriangle(cx - 2 * r + 2, cy - 1, cx + 2 * r - 2, cy - 1, cx, cy + 2 * r - 1, col);
+    msgCanvas.fillCircle(cx - r + 1, cy - 5, 2, 0xFFFF);
+  } else if (ic == 1) {
+    // Ноутбук с анимированным кодом
+    msgCanvas.drawRoundRect(10, 8, 36, 22, 3, col);
+    msgCanvas.fillRect(12, 10, 32, 18, COL_CARD_BG);
+    msgCanvas.fillRoundRect(6, 31, 44, 5, 2, col);
+    int lineAnim = (int)((nowMs / 280) % 4);
+    for (int i = 0; i < 3; i++) {
+      int w = (i == lineAnim) ? 22 : (14 + ((i * 5) % 10));
+      msgCanvas.drawFastHLine(15, 14 + i * 4, w, (i == lineAnim) ? 0xFFFF : col);
+    }
+    if ((nowMs / 350) % 2 == 0) msgCanvas.fillRect(15 + ((lineAnim * 4) % 18), 25, 4, 2, COL_MINT_OK);
+  } else if (ic == 2) {
+    // Машинка "Еду к тебе" + бегущая дорога + сердечко сверху
+    int16_t bob = (int16_t)iroundf(sinf(nowMs * 0.015f) * 1.2f);
+    msgCanvas.fillRoundRect(14, 18 + bob, 28, 11, 4, col);
+    msgCanvas.fillRoundRect(19, 12 + bob, 17, 8, 3, col);
+    msgCanvas.fillRect(21, 14 + bob, 5, 4, COL_BG);
+    msgCanvas.fillRect(28, 14 + bob, 6, 4, COL_BG);
+    msgCanvas.fillCircle(20, 30, 4, 0xFFFF); msgCanvas.fillCircle(20, 30, 2, COL_BG);
+    msgCanvas.fillCircle(36, 30, 4, 0xFFFF); msgCanvas.fillCircle(36, 30, 2, COL_BG);
+    msgCanvas.fillCircle(42, 22 + bob, 2, COL_GOLD_SOFT);
+    int roadPhase = (int)((nowMs / 65) % 12);
+    for (int x = -roadPhase; x < 56; x += 12) {
+      msgCanvas.drawFastHLine(x, 37, 6, COL_RING_DIM);
+    }
+    msgCanvas.fillCircle(26, 6 + bob, 2, COL_PINK_HOT);
+    msgCanvas.fillCircle(30, 6 + bob, 2, COL_PINK_HOT);
+    msgCanvas.fillTriangle(24, 7 + bob, 32, 7 + bob, 28, 11 + bob, COL_PINK_HOT);
+  } else if (ic == 3) {
+    // Полумесяц + звёздочки "Сплю"
+    msgCanvas.fillCircle(24, 22, 12, col);
+    msgCanvas.fillCircle(30, 18, 10, COL_BG);
+    int phase = (int)((nowMs / 350) % 3);
+    msgCanvas.fillCircle(39, 11, (phase == 0) ? 2 : 1, 0xFFFF);
+    msgCanvas.fillCircle(45, 22, (phase == 1) ? 2 : 1, COL_GOLD_SOFT);
+    msgCanvas.fillCircle(12, 11, (phase == 2) ? 2 : 1, 0xFFFF);
+    int zOff = (int)((nowMs / 180) % 6);
+    drawTextUTF8(msgCanvas, 35, 27 - zOff, "z", col, COL_BG, 1);
+  } else if (ic == 4) {
+    // Чашка чая с паром "Отдыхаю дома"
+    msgCanvas.fillRoundRect(15, 20, 24, 16, 4, col);
+    msgCanvas.drawCircle(40, 27, 4, col);
+    msgCanvas.drawCircle(40, 27, 3, col);
+    msgCanvas.drawFastHLine(12, 37, 30, COL_MUTED);
+    for (int s = 0; s < 3; s++) {
+      int sx = 20 + s * 6 + (int)iroundf(sinf(nowMs * 0.006f + s * 1.5f) * 2.0f);
+      int sy = 15 - ((int)(nowMs / 140 + s * 3) % 7);
+      msgCanvas.drawFastVLine(sx, sy, 4, 0xFFFF);
+    }
+  } else if (ic == 5) {
+    // Линия пульса / энергии "Дела / Спорт"
+    msgCanvas.drawCircle(28, 22, 16, COL_RING_DIM);
+    int sweep = (int)((nowMs / 45) % 44);
+    int16_t px[7] = { 8, 18, 23, 28, 33, 38, 48 };
+    int16_t py[7] = { 24, 24, 13, 33, 17, 24, 24 };
+    for (int i = 0; i < 6; i++) {
+      msgCanvas.drawLine(px[i], py[i], px[i + 1], py[i + 1], col);
+      msgCanvas.drawLine(px[i], py[i] + 1, px[i + 1], py[i + 1] + 1, col);
+    }
+    int dotX = 8 + sweep;
+    if (dotX <= 48) msgCanvas.fillCircle(dotX, 24, 2, 0xFFFF);
+  } else {
+    // Свободен для тебя: сердце + волны
+    float wave = (float)((nowMs % 1200) / 1200.0f);
+    int wr = 11 + (int)(wave * 9.0f);
+    if (wr < 20) msgCanvas.drawCircle(28, 22, wr, dim565(col, (uint8_t)((1.0f - wave) * 220)));
+    int16_t cx = 28, cy = 21;
+    msgCanvas.fillCircle(cx - 5, cy - 2, 6, COL_PINK_HOT);
+    msgCanvas.fillCircle(cx + 5, cy - 2, 6, COL_PINK_HOT);
+    msgCanvas.fillTriangle(cx - 11, cy, cx + 11, cy, cx, cy + 12, COL_PINK_HOT);
+  }
+
+  uint16_t* src = msgCanvas.getBuffer();
+  int stride = msgCanvas.width();
+  for (int y = 1; y < H; y++) {
+    memmove(src + y * W, src + y * stride, (size_t)W * sizeof(uint16_t));
+  }
+  tft.drawRGBBitmap(92, 42, src, W, H);
+}
+
+void drawMyStatusStatic() {
+  tft.fillScreen(COL_BG);
+  drawDecorativeRings();
+  uint16_t accent = getMyStatusAccentColor(myStatusIcon);
+  tft.drawCircle(120, 120, 115, dim565(accent, 110));
+
+  drawCenteredUTF8(tft, 20, "СЕЙЧАС Я", accent, COL_BG, 1);
+
+  // Карточка текста статуса по центру
+  tft.fillRoundRect(26, 94, 188, 64, 14, COL_CARD_BG);
+  tft.drawRoundRect(26, 94, 188, 64, 14, dim565(accent, 150));
+
+  const char* src = (myStatusText[0] != '\0') ? myStatusText : "Думаю о тебе ♥";
+  int totalChars = (int)utf8CharCount(src);
+  uint8_t sc = (totalChars <= 12) ? 2 : 1;
+  int maxCharsLine = (sc == 2) ? 12 : 26;
+
+  char lines[3][76];
+  int lCnt = 0;
+  const char* p = src;
+  while (*p && lCnt < 3) {
+    while (*p == ' ') p++;
+    if (!*p) break;
+    const char* lineStart = p;
+    const char* lastSpace = nullptr;
+    int chars = 0;
+    while (*p) {
+      const char* nextP = p;
+      uint8_t lead = (uint8_t)*nextP;
+      if (lead < 0x80) nextP += 1;
+      else if ((lead & 0xE0) == 0xC0 && nextP[1]) nextP += 2;
+      else if ((lead & 0xF0) == 0xE0 && nextP[1] && nextP[2]) nextP += 3;
+      else if ((lead & 0xF8) == 0xF0 && nextP[1] && nextP[2] && nextP[3]) nextP += 4;
+      else nextP += 1;
+      chars++;
+      if (*p == ' ') lastSpace = p;
+      if (chars > maxCharsLine) {
+        if (lastSpace && lastSpace > lineStart) p = lastSpace;
+        break;
+      }
+      p = nextP;
+    }
+    size_t len = (size_t)(p - lineStart);
+    if (len >= sizeof(lines[0])) len = sizeof(lines[0]) - 1;
+    memcpy(lines[lCnt], lineStart, len);
+    lines[lCnt][len] = '\0';
+    lCnt++;
+  }
+  if (lCnt == 0) {
+    strcpy(lines[0], "—");
+    lCnt = 1;
+  }
+
+  int step = (sc == 2) ? 20 : 13;
+  int totalH = lCnt * step;
+  int startY = 94 + (64 - totalH) / 2 + 2;
+  for (int i = 0; i < lCnt; i++) {
+    drawCenteredUTF8(tft, startY + i * step, lines[i], 0xFFFF, COL_CARD_BG, sc);
+  }
+
+  if (myStatusEpoch > 1700000000UL) {
+    char tmBuf[40];
+    formatMsgTimestamp(myStatusEpoch, tmBuf, sizeof(tmBuf));
+    char sub[52];
+    snprintf(sub, sizeof(sub), "Обновлено %s", tmBuf);
+    drawCenteredUTF8(tft, 168, sub, COL_MUTED, COL_BG, 1);
+  } else {
+    drawCenteredUTF8(tft, 168, "Статус любимого ♥", COL_MUTED, COL_BG, 1);
+  }
+
+  renderMyStatusIconBuffered(millis());
   drawPageDots(5, false);
 }
 
@@ -2204,6 +2393,8 @@ void stepPageTransition(unsigned long nowMs) {
         drawHeartIpStatic();
       } else if (currentScreen == SCREEN_WEATHER) {
         drawWeatherStatic();
+      } else if (currentScreen == SCREEN_MY_STATUS) {
+        drawMyStatusStatic();
       } else if (currentScreen == SCREEN_PULSE) {
         drawPulseStatic();
       } else if (currentScreen == SCREEN_MESSAGES && !hasActiveCard0()) {
@@ -2313,6 +2504,9 @@ void stepPageTransition(unsigned long nowMs) {
   } else if (currentScreen == SCREEN_WEATHER) {
     renderWeatherIconBuffered(nowMs);
     renderWeatherWalkablePill(nowMs, 0);
+    if (p >= 1.0f) transActive = false;
+  } else if (currentScreen == SCREEN_MY_STATUS) {
+    renderMyStatusIconBuffered(nowMs);
     if (p >= 1.0f) transActive = false;
   } else {
     renderMiniHeartBuffered(106, 16, nowMs, true);
@@ -2873,12 +3067,25 @@ void setupWebRoutes() {
     appendJsonStrField(json, "ip", ip.c_str());
     appendJsonStrField(json, "weather_city", weatherCity.c_str());
     appendJsonStrField(json, "version", FIRMWARE_VERSION);
+    appendJsonStrField(json, "st_text", myStatusText);
     char shortC[10] = "";
     if (otaInstalledCommit[0]) {
       strncpy(shortC, otaInstalledCommit, 7);
       shortC[7] = '\0';
     }
     appendJsonStrField(json, "commit", shortC);
+    json += '}';
+    server.send(200, JSON_CT, json);
+  });
+
+  server.on("/api/my_status", HTTP_GET, []() {
+    String json;
+    json.reserve(160);
+    char head[48];
+    snprintf(head, sizeof(head), "{\"icon\":%u,\"epoch\":%lu",
+             (unsigned int)myStatusIcon, (unsigned long)myStatusEpoch);
+    json += head;
+    appendJsonStrField(json, "text", myStatusText);
     json += '}';
     server.send(200, JSON_CT, json);
   });
@@ -2991,8 +3198,8 @@ void setupWebRoutes() {
       unreadTextMsg = false;
       if ((currentScreen == SCREEN_MESSAGES && !hasActiveCard0()) || currentScreen == SCREEN_TEXT_MSG) {
         screenNeedsFullRedraw = true;
-      } else if (currentScreen == SCREEN_TIMER || currentScreen == SCREEN_WEATHER || currentScreen == SCREEN_HEART_IP) {
-        int pg = (currentScreen == SCREEN_TIMER) ? 1 : ((currentScreen == SCREEN_WEATHER) ? 4 : 5);
+      } else if (currentScreen == SCREEN_TIMER || currentScreen == SCREEN_WEATHER || currentScreen == SCREEN_MY_STATUS || currentScreen == SCREEN_HEART_IP) {
+        int pg = (currentScreen == SCREEN_TIMER) ? 1 : ((currentScreen == SCREEN_WEATHER) ? 4 : ((currentScreen == SCREEN_MY_STATUS) ? 5 : 6));
         drawPageDots(pg, false);
       }
     }
@@ -3180,6 +3387,8 @@ void scrollNextPage() {
     unreadTextMsg = false;
     nextMode = SCREEN_WEATHER;
   } else if (cur == SCREEN_WEATHER) {
+    nextMode = SCREEN_MY_STATUS;
+  } else if (cur == SCREEN_MY_STATUS) {
     nextMode = SCREEN_HEART_IP;
   } else {
     nextMode = SCREEN_TIMER;
@@ -3314,6 +3523,12 @@ void setup() {
   tft.setRotation(screenRotation);
   prefs.getString("otaCommit", "").toCharArray(otaInstalledCommit, sizeof(otaInstalledCommit));
   prefs.getString("otaBinSha", "").toCharArray(otaInstalledBinSha, sizeof(otaInstalledBinSha));
+  myStatusIcon = prefs.getUChar("stIcon", 0) % 7;
+  String stSaved = prefs.getString("stText", "Думаю о тебе ♥");
+  if (stSaved.length() > 0) {
+    stSaved.toCharArray(myStatusText, sizeof(myStatusText));
+  }
+  myStatusEpoch = prefs.getUInt("stEpoch", 0);
 
   playBootAnimation();
 
@@ -3433,6 +3648,23 @@ void loop() {
     } else if (strncmp(pendingAdminCmd, "ROT|", 4) == 0) {
       applyScreenRotation((uint8_t)atoi(pendingAdminCmd + 4), true);
       adminReportRequested = true;
+    } else if (strncmp(pendingAdminCmd, "STATUS_SET|", 11) == 0) {
+      const char* pIcon = pendingAdminCmd + 11;
+      const char* pBar = strchr(pIcon, '|');
+      myStatusIcon = (uint8_t)(atoi(pIcon) % 7);
+      if (pBar && pBar[1] != '\0') {
+        strncpy(myStatusText, pBar + 1, sizeof(myStatusText) - 1);
+        myStatusText[sizeof(myStatusText) - 1] = '\0';
+      }
+      uint32_t curEp = getCurrentUtcEpoch();
+      if (curEp > 1700000000UL) myStatusEpoch = curEp;
+      prefs.putUChar("stIcon", myStatusIcon);
+      prefs.putString("stText", String(myStatusText));
+      prefs.putUInt("stEpoch", myStatusEpoch);
+      adminReportRequested = true;
+      if (!apActive && !bannerActive && !btn1HoldUiActive) {
+        beginPageTransition(SCREEN_MY_STATUS);
+      }
     } else if (strncmp(pendingAdminCmd, "CITY|", 5) == 0) {
       char buf[192];
       strncpy(buf, pendingAdminCmd + 5, sizeof(buf) - 1);
@@ -3566,6 +3798,8 @@ void loop() {
       drawHeartIpStatic();
     } else if (currentScreen == SCREEN_WEATHER) {
       drawWeatherStatic();
+    } else if (currentScreen == SCREEN_MY_STATUS) {
+      drawMyStatusStatic();
     } else if (currentScreen == SCREEN_PULSE) {
       drawPulseStatic();
     } else {
@@ -3587,6 +3821,8 @@ void loop() {
       renderWeatherIconBuffered(nowMs);
       renderWeatherWalkablePill(nowMs, 0);
       renderMiniHeartBuffered(106, 178, nowMs, true);
+    } else if (currentScreen == SCREEN_MY_STATUS) {
+      renderMyStatusIconBuffered(nowMs);
     } else if (currentScreen == SCREEN_MESSAGES) {
       if (!hasActiveCard0()) {
         renderMiniHeartBuffered(106, 16, nowMs, true);
