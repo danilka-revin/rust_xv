@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -8,86 +8,140 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Montserrat:wght@600;800&family=Playfair+Display:ital,wght@0,700;1,700&display=swap" rel="stylesheet">
   <style>
-    :root {
-      --bg: #07050c;
-      --card: rgba(16, 12, 24, 0.78);
-      --border: rgba(255, 255, 255, 0.095);
-      --accent: #ff3d77;
-      --accent-2: #ff85ab;
-      --violet: #a855f7;
-      --text: #faf5f8;
-      --muted: #a694a8;
+    :root, [data-theme="dark"] {
+      --bg: #161513;
+      --card: #1c1a18;
+      --raised: #262421;
+      --border: rgba(239, 233, 222, 0.09);
+      --border-strong: rgba(239, 233, 222, 0.18);
+      --text: #efe9de;
+      --text-2: #aaa398;
+      --muted: #8a847a;
+      --accent: #e25578;
+      --accent-hover: #ee6a8b;
+      --accent-soft: rgba(226, 85, 120, 0.14);
+      --accent-text: #f38ba5;
+      --ok: #4cc38a;
+      --ok-soft: rgba(76, 195, 138, 0.12);
+      --err: #e5484d;
+      --err-soft: rgba(229, 72, 77, 0.13);
+      --shadow-sm: none;
+      --shadow-md: none;
+      --ring-bg: linear-gradient(145deg, #2d2925, #141210);
+      --btn-primary-bg: #efe9de;
+      --btn-primary-text: #161513;
+      --btn-primary-hover: #ffffff;
+    }
+
+    [data-theme="light"] {
+      --bg: #f7f4ee;
+      --card: #fdfbf7;
+      --raised: #efe9df;
+      --border: rgba(31, 27, 22, 0.09);
+      --border-strong: rgba(31, 27, 22, 0.16);
+      --text: #1f1b16;
+      --text-2: #5e554a;
+      --muted: #7b7266;
+      --accent: #c8375a;
+      --accent-hover: #b12d4e;
+      --accent-soft: rgba(200, 55, 90, 0.09);
+      --accent-text: #a52445;
+      --ok: #16a34a;
+      --ok-soft: rgba(22, 163, 74, 0.10);
+      --err: #dc2626;
+      --err-soft: rgba(220, 38, 38, 0.09);
+      --shadow-sm: 0 1px 2px rgba(31, 27, 22, 0.05);
+      --shadow-md: 0 8px 24px rgba(31, 27, 22, 0.06);
+      --ring-bg: linear-gradient(145deg, #e7dfd3, #cfc4b4);
+      --btn-primary-bg: #1f1b16;
+      --btn-primary-text: #fdfbf7;
+      --btn-primary-hover: #352e26;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
-      background: var(--bg);
+      background-color: var(--bg);
       color: var(--text);
       min-height: 100vh;
-      padding: 20px 14px 52px;
-      position: relative;
-      overflow-x: hidden;
-    }
-
-    /* React Bits: Soft Aurora + Dot Field */
-    .dot-field {
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      z-index: 0;
-      background-image: radial-gradient(rgba(255, 255, 255, 0.075) 1px, transparent 1px);
-      background-size: 24px 24px;
-      mask-image: radial-gradient(ellipse 85% 75% at 50% 25%, #000 35%, transparent 100%);
-      -webkit-mask-image: radial-gradient(ellipse 85% 75% at 50% 25%, #000 35%, transparent 100%);
-    }
-
-    .aurora-bg {
-      position: fixed;
-      inset: -20%;
-      pointer-events: none;
-      z-index: 0;
-      overflow: hidden;
-      filter: blur(72px);
-      opacity: 0.62;
-    }
-
-    .aurora-band {
-      position: absolute;
-      width: 68vmax;
-      height: 48vmax;
-      border-radius: 50%;
-      mix-blend-mode: screen;
-      animation: auroraDrift 16s ease-in-out infinite alternate;
-    }
-
-    .aurora-1 {
-      top: -14%;
-      left: -8%;
-      background: radial-gradient(circle, rgba(255, 61, 119, 0.48) 0%, rgba(168, 85, 247, 0.18) 52%, transparent 74%);
-    }
-
-    .aurora-2 {
-      bottom: -14%;
-      right: -8%;
-      background: radial-gradient(circle, rgba(168, 85, 247, 0.36) 0%, rgba(255, 133, 171, 0.16) 50%, transparent 74%);
-      animation-delay: -8s;
-      animation-duration: 21s;
-    }
-
-    @keyframes auroraDrift {
-      0% { transform: translate3d(0, 0, 0) scale(1) rotate(0deg); }
-      50% { transform: translate3d(6vw, 4vh, 0) scale(1.12) rotate(12deg); }
-      100% { transform: translate3d(-5vw, -3vh, 0) scale(0.95) rotate(-8deg); }
+      padding: 24px 16px 48px;
+      line-height: 1.5;
+      transition: background-color 180ms cubic-bezier(0.22, 1, 0.36, 1), color 180ms cubic-bezier(0.22, 1, 0.36, 1);
     }
 
     .wrap {
       max-width: 960px;
       margin: 0 auto;
-      position: relative;
-      z-index: 1;
     }
+
+    .topbar {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .header-title {
+      font-size: 24px;
+      font-weight: 500;
+      letter-spacing: -0.02em;
+      color: var(--text);
+      line-height: 1.15;
+    }
+
+    .header-sub {
+      font-size: 14px;
+      color: var(--text-2);
+      margin-top: 4px;
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .status-line {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      height: 36px;
+      padding: 0 12px;
+      border-radius: 10px;
+      font-size: 12px;
+      color: var(--text-2);
+      background: var(--card);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--ok);
+    }
+
+    .theme-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text-2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: var(--shadow-sm);
+      transition: background-color 150ms cubic-bezier(0.22, 1, 0.36, 1), color 150ms cubic-bezier(0.22, 1, 0.36, 1), transform 120ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .theme-btn:hover { background: var(--raised); color: var(--text); }
+    .theme-btn:active { transform: scale(0.97); }
 
     .bento-grid {
       display: grid;
@@ -109,150 +163,61 @@
       gap: 16px;
     }
 
-    .header {
-      text-align: center;
-      margin-bottom: 20px;
-    }
-
-    /* React Bits: BlurText + ShinyText */
-    .header h1 {
-      font-size: 26px;
-      font-weight: 800;
-      letter-spacing: -0.6px;
-      background: linear-gradient(110deg, #ffffff 25%, #ffb6cf 48%, #ffffff 72%);
-      background-size: 220% 100%;
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      animation: blurReveal 0.65s cubic-bezier(0.22, 1, 0.36, 1) both, shineSweep 5.5s linear infinite;
-    }
-
-    .header p {
-      font-size: 13.5px;
-      color: var(--muted);
-      margin-top: 5px;
-      line-height: 1.45;
-      animation: blurReveal 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
-    }
-
-    .status-mark {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 10px;
-      padding: 5px 13px;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 600;
-      background: rgba(255, 255, 255, 0.045);
-      border: 1px solid rgba(255, 255, 255, 0.11);
-      color: #dfd3e0;
-    }
-
-    .status-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: #34d399;
-      box-shadow: 0 0 10px rgba(52, 211, 153, 0.8);
-    }
-
-    @keyframes blurReveal {
-      from { opacity: 0; filter: blur(8px); transform: translateY(6px); }
-      to { opacity: 1; filter: blur(0); transform: translateY(0); }
-    }
-
-    @keyframes shineSweep {
-      0% { background-position: 200% 0; }
-      100% { background-position: -200% 0; }
-    }
-
-    /* React Bits: Border Glow + Spotlight Card */
     .card {
-      position: relative;
       background: var(--card);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
       border: 1px solid var(--border);
-      border-radius: 26px;
-      padding: 20px 18px;
-      box-shadow: 0 18px 46px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-      overflow: hidden;
-      --mx: 50%;
-      --my: 0%;
-      --glow-o: 0;
-    }
-
-    .card::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      border-radius: inherit;
-      padding: 1.2px;
-      background: radial-gradient(260px circle at var(--mx) var(--my), rgba(255, 85, 145, 0.72), rgba(168, 85, 247, 0.36) 45%, transparent 72%);
-      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-      -webkit-mask-composite: xor;
-      mask-composite: exclude;
-      opacity: var(--glow-o);
-      transition: opacity 0.28s ease;
-      pointer-events: none;
-    }
-
-    .card::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: radial-gradient(340px circle at var(--mx) var(--my), rgba(255, 61, 119, 0.08), transparent 65%);
-      opacity: var(--glow-o);
-      transition: opacity 0.28s ease;
-      pointer-events: none;
-    }
-
-    .card > * {
-      position: relative;
-      z-index: 1;
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: var(--shadow-md);
+      transition: background-color 180ms cubic-bezier(0.22, 1, 0.36, 1), border-color 180ms cubic-bezier(0.22, 1, 0.36, 1);
     }
 
     .card-head {
       display: flex;
-      align-items: center;
+      align-items: baseline;
       justify-content: space-between;
-      margin-bottom: 12px;
+      margin-bottom: 16px;
       gap: 8px;
     }
 
-    .card-badge {
-      font-size: 11px;
-      font-weight: 700;
-      padding: 3px 9px;
-      border-radius: 999px;
-      background: rgba(255, 61, 119, 0.14);
-      border: 1px solid rgba(255, 133, 171, 0.28);
-      color: #ffc2d6;
+    .card-title {
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    .card-meta {
+      font-size: 12px;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
       white-space: nowrap;
     }
 
-    /* Круглая сцена 240x240 */
+    /* Круглая сцена 240x240 — главный предметный объект */
     .stage-wrap {
       display: flex;
       flex-direction: column;
       align-items: center;
+      padding: 8px 0 4px;
     }
+
     .watch-ring {
-      width: 268px;
-      height: 268px;
+      width: 264px;
+      height: 264px;
       border-radius: 50%;
-      padding: 14px;
-      background: linear-gradient(145deg, #2b1d2e, #0e0a12);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      box-shadow: 0 18px 44px rgba(0,0,0,0.65), 0 0 36px rgba(255, 61, 119, 0.18), inset 0 1px 2px rgba(255,255,255,0.16);
+      padding: 11px;
+      background: var(--ring-bg);
+      border: 1px solid var(--border-strong);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
       position: relative;
       touch-action: none;
     }
+
     canvas#editorCanvas {
       width: 240px;
       height: 240px;
       border-radius: 50%;
-      background: #000;
+      background: #000000;
       display: block;
       cursor: grab;
       touch-action: none;
@@ -260,41 +225,48 @@
     canvas#editorCanvas:active { cursor: grabbing; }
 
     .stage-hint {
-      font-size: 11.5px;
+      font-size: 12px;
       color: var(--muted);
-      margin-top: 9px;
+      margin-top: 12px;
       text-align: center;
     }
 
-    /* Вкладки инструментов (Glass Pill Segment) */
+    /* Вкладки инструментов */
     .tool-tabs {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
-      gap: 6px;
-      margin: 16px 0 14px;
-      background: rgba(255, 255, 255, 0.035);
+      gap: 4px;
+      margin: 16px 0;
+      background: var(--raised);
       border: 1px solid var(--border);
-      border-radius: 16px;
+      border-radius: 12px;
       padding: 4px;
     }
+
     .tool-tab {
+      height: 36px;
       border: 1px solid transparent;
       background: transparent;
-      color: var(--muted);
-      border-radius: 12px;
-      padding: 8px 4px;
-      font-size: 11.5px;
-      font-weight: 700;
+      color: var(--text-2);
+      border-radius: 8px;
+      padding: 0 6px;
+      font-size: 12.5px;
+      font-weight: 500;
+      font-family: inherit;
       cursor: pointer;
-      text-align: center;
-      transition: 0.18s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: background-color 140ms cubic-bezier(0.22, 1, 0.36, 1), color 140ms cubic-bezier(0.22, 1, 0.36, 1), border-color 140ms cubic-bezier(0.22, 1, 0.36, 1);
     }
-    .tool-tab:hover { color: #fff; }
+
+    .tool-tab:hover { color: var(--text); }
     .tool-tab.active {
-      background: linear-gradient(135deg, rgba(255, 61, 119, 0.25), rgba(168, 85, 247, 0.2));
-      border-color: rgba(255, 133, 171, 0.36);
-      color: #fff;
-      box-shadow: 0 4px 14px rgba(255, 61, 119, 0.18);
+      background: var(--card);
+      border-color: var(--border);
+      color: var(--text);
+      box-shadow: var(--shadow-sm);
     }
 
     .panel { display: none; }
@@ -304,209 +276,219 @@
       display: flex;
       gap: 8px;
       align-items: center;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
       flex-wrap: wrap;
     }
+
     .label-sm {
-      font-size: 12px;
-      font-weight: 700;
-      color: #e4d4e6;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-2);
       margin-bottom: 6px;
       display: block;
     }
 
     .btn-sm {
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      background: rgba(255, 255, 255, 0.05);
-      color: #f3e6ef;
-      border-radius: 11px;
-      padding: 7px 11px;
-      font-size: 12px;
-      font-weight: 600;
+      height: 36px;
+      border: 1px solid var(--border-strong);
+      background: var(--raised);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 0 12px;
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
       cursor: pointer;
-      transition: background 0.15s, border-color 0.15s, transform 0.12s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background-color 140ms cubic-bezier(0.22, 1, 0.36, 1), border-color 140ms cubic-bezier(0.22, 1, 0.36, 1), transform 120ms cubic-bezier(0.22, 1, 0.36, 1);
     }
-    .btn-sm:hover { background: rgba(255, 255, 255, 0.10); border-color: rgba(255, 133, 171, 0.36); }
+
+    .btn-sm:hover { border-color: var(--text-2); }
     .btn-sm:active { transform: scale(0.97); }
     .btn-sm.primary {
-      background: linear-gradient(135deg, #ff3d77, #c82257);
-      border-color: rgba(255, 165, 195, 0.38);
-      color: #fff;
+      background: var(--btn-primary-bg);
+      border-color: transparent;
+      color: var(--btn-primary-text);
     }
+    .btn-sm.primary:hover { background: var(--btn-primary-hover); }
 
     .input, textarea, select {
       width: 100%;
       padding: 10px 12px;
-      border-radius: 14px;
-      border: 1px solid var(--border);
-      background: rgba(0, 0, 0, 0.36);
-      color: #fff;
-      font-size: 13.5px;
+      border-radius: 10px;
+      border: 1px solid var(--border-strong);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
       font-family: inherit;
       outline: none;
-      transition: border-color 0.2s, box-shadow 0.2s;
+      transition: border-color 140ms cubic-bezier(0.22, 1, 0.36, 1);
     }
-    textarea { min-height: 68px; resize: vertical; }
+    .input, select { height: 40px; padding: 0 12px; }
+    textarea { min-height: 76px; resize: vertical; line-height: 1.45; }
     .input:focus, textarea:focus, select:focus {
-      border-color: rgba(255, 85, 145, 0.72);
-      box-shadow: 0 0 0 3px rgba(255, 61, 119, 0.16);
+      border-color: var(--accent);
     }
-    select option { background: #140f1c; color: #fff; }
 
     input[type="range"] {
       width: 100%;
-      accent-color: #ff3d77;
+      accent-color: var(--accent);
       cursor: pointer;
     }
 
     .slider-row {
       display: grid;
-      grid-template-columns: 92px 1fr 40px;
+      grid-template-columns: 88px 1fr 44px;
       gap: 8px;
       align-items: center;
       margin-bottom: 8px;
-      font-size: 12px;
-      color: #d9c4d6;
+      font-size: 12.5px;
+      color: var(--text-2);
+      font-variant-numeric: tabular-nums;
+    }
+    .slider-row span:last-child { text-align: right; color: var(--muted); }
+
+    .subbox {
+      padding: 12px;
+      background: var(--raised);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 12px;
     }
 
     .swatches {
       display: flex;
-      gap: 7px;
+      gap: 8px;
       flex-wrap: wrap;
       align-items: center;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
     }
+
     .swatch {
       width: 24px;
       height: 24px;
       border-radius: 50%;
-      border: 2px solid rgba(255,255,255,0.28);
+      border: 2px solid var(--border-strong);
       cursor: pointer;
-      transition: transform 0.15s, border-color 0.15s;
+      transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1), border-color 140ms cubic-bezier(0.22, 1, 0.36, 1);
     }
-    .swatch.active { border-color: #fff; transform: scale(1.16); }
+    .swatch.active { border-color: var(--text); transform: scale(1.12); }
 
     .emoji-grid {
       display: grid;
       grid-template-columns: repeat(7, 1fr);
-      gap: 5px;
-      margin-bottom: 10px;
+      gap: 6px;
+      margin-bottom: 12px;
     }
+
     .emoji-btn {
       font-size: 20px;
-      padding: 6px 0;
-      border-radius: 10px;
-      border: 1px solid rgba(255,255,255,0.08);
-      background: rgba(255,255,255,0.04);
+      height: 36px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--raised);
       cursor: pointer;
-      transition: 0.12s;
+      transition: background-color 120ms cubic-bezier(0.22, 1, 0.36, 1), transform 120ms cubic-bezier(0.22, 1, 0.36, 1);
     }
-    .emoji-btn:hover { background: rgba(255,61,119,0.25); transform: scale(1.08); }
+    .emoji-btn:hover { background: var(--accent-soft); }
+    .emoji-btn:active { transform: scale(0.95); }
 
     .layer-item {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 8px 11px;
-      border-radius: 12px;
-      background: rgba(255,255,255,0.035);
+      height: 36px;
+      padding: 0 12px;
+      border-radius: 8px;
+      background: var(--bg);
       border: 1px solid var(--border);
       margin-bottom: 6px;
-      font-size: 12.5px;
+      font-size: 13px;
       cursor: pointer;
+      color: var(--text);
     }
     .layer-item.selected {
-      border-color: rgba(255, 85, 145, 0.72);
-      background: rgba(255, 61, 119, 0.14);
+      border-color: var(--accent);
+      background: var(--accent-soft);
     }
 
-    /* React Bits: Specular Button */
     .btn-send {
-      position: relative;
       width: 100%;
-      border: 1px solid rgba(255, 165, 195, 0.42);
-      border-radius: 16px;
-      padding: 13px 18px;
-      font-size: 14.5px;
-      font-weight: 700;
-      color: #fff;
-      background: linear-gradient(135deg, var(--accent) 0%, #c82257 100%);
-      box-shadow: 0 8px 24px rgba(255, 61, 119, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+      height: 44px;
+      border: none;
+      border-radius: 10px;
+      padding: 0 16px;
+      font-size: 14px;
+      font-weight: 500;
+      font-family: inherit;
+      color: #ffffff;
+      background: var(--accent);
       cursor: pointer;
-      margin-top: 10px;
-      overflow: hidden;
-      transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.2s;
-      --bx: 50%;
-      --by: 50%;
+      margin-top: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background-color 140ms cubic-bezier(0.22, 1, 0.36, 1), transform 120ms cubic-bezier(0.22, 1, 0.36, 1), opacity 140ms;
     }
-    .btn-send::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: radial-gradient(130px circle at var(--bx) var(--by), rgba(255, 255, 255, 0.28), transparent 65%);
-      opacity: 0;
-      transition: opacity 0.2s;
-      pointer-events: none;
-    }
-    .btn-send:hover::after { opacity: 1; }
+    .btn-send:hover { background: var(--accent-hover); }
     .btn-send:active { transform: scale(0.98); }
     .btn-send:disabled { opacity: 0.6; cursor: wait; }
 
     .status {
-      margin-top: 10px;
+      margin-top: 12px;
       padding: 10px 12px;
-      border-radius: 13px;
-      font-size: 12.5px;
+      border-radius: 10px;
+      font-size: 13px;
       line-height: 1.45;
       display: none;
     }
-    .status.ok { display: block; background: rgba(52,211,153,0.12); border: 1px solid rgba(52,211,153,0.36); color: #a7f3d0; }
-    .status.err { display: block; background: rgba(251,113,133,0.14); border: 1px solid rgba(251,113,133,0.38); color: #fecdd3; }
+    .status.ok { display: block; background: var(--ok-soft); border: 1px solid var(--ok); color: var(--ok); }
+    .status.err { display: block; background: var(--err-soft); border: 1px solid var(--err); color: var(--err); }
 
     .reply-item {
       margin-top: 8px;
       padding: 10px 12px;
-      background: rgba(255, 61, 119, 0.10);
-      border: 1px solid rgba(255, 133, 171, 0.24);
-      border-radius: 13px;
-      color: #f9e6ee;
-      font-size: 12.5px;
+      background: var(--raised);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 13px;
     }
 
-    .spark {
-      position: fixed;
-      width: 5px;
-      height: 5px;
-      border-radius: 50%;
-      pointer-events: none;
-      z-index: 99;
-      background: #ff85ab;
-      box-shadow: 0 0 8px #ff3d77;
-      animation: sparkOut 0.48s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    details summary {
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--text-2);
+      font-weight: 500;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
+    details summary::-webkit-details-marker { display: none; }
 
-    @keyframes sparkOut {
-      from { transform: translate(0, 0) scale(1); opacity: 1; }
-      to { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
-    }
-
-    details summary { cursor: pointer; font-size: 12.5px; color: var(--muted); font-weight: 600; }
+    .hidden { display: none !important; }
   </style>
 </head>
 <body>
-  <div class="aurora-bg">
-    <div class="aurora-band aurora-1"></div>
-    <div class="aurora-band aurora-2"></div>
-  </div>
-  <div class="dot-field"></div>
-
   <div class="wrap">
-    <div class="header">
-      <h1>Пульт станции отношений</h1>
-      <p>Студия круглых открыток и мгновенных сообщений через облако</p>
-      <div class="status-mark">
-        <span class="status-dot"></span>
-        <span>Канал ntfy.sh активен</span>
+    <div class="topbar">
+      <div>
+        <h1 class="header-title">Пульт станции отношений</h1>
+        <p class="header-sub">Конструктор круглых открыток и текстовых сообщений</p>
+      </div>
+      <div class="topbar-right">
+        <div class="status-line">
+          <span class="status-dot"></span>
+          <span>Канал ntfy.sh</span>
+        </div>
+        <button type="button" class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Переключить тему" aria-label="Переключить тему">
+          <svg id="themeIconSun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+          <svg id="themeIconMoon" class="hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+        </button>
       </div>
     </div>
 
@@ -514,49 +496,61 @@
       <!-- ЛЕВАЯ КОЛОНКА: КОНСТРУКТОР ОТКРЫТОК (2-Я СТРАНИЦА) -->
       <div class="card">
         <div class="card-head">
-          <span class="label-sm" style="margin:0; font-size:14px;">🎨 Конструктор открытки</span>
-          <span class="card-badge">Страница 2</span>
+          <span class="card-title">Конструктор открытки</span>
+          <span class="card-meta">Страница 2 · 240×240</span>
         </div>
         <div class="stage-wrap">
           <div class="watch-ring">
             <canvas id="editorCanvas" width="240" height="240"></canvas>
           </div>
-          <div class="stage-hint">👆 Тяни любой элемент прямо пальцем или мышкой по кругу</div>
+          <div class="stage-hint">Перетаскивай текст, стикеры или фон прямо внутри круга</div>
         </div>
 
       <div class="tool-tabs">
-        <button type="button" class="tool-tab active" onclick="openToolTab('bg', this)">🖼 Фон/Фото</button>
-        <button type="button" class="tool-tab" onclick="openToolTab('text', this)">🔤 Текст</button>
-        <button type="button" class="tool-tab" onclick="openToolTab('emoji', this)">😍 Эмодзи</button>
-        <button type="button" class="tool-tab" onclick="openToolTab('layers', this)">📚 Слои</button>
+        <button type="button" class="tool-tab active" onclick="openToolTab('bg', this)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+          <span>Фон</span>
+        </button>
+        <button type="button" class="tool-tab" onclick="openToolTab('text', this)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" x2="15" y1="20" y2="20"/><line x1="12" x2="12" y1="4" y2="20"/></svg>
+          <span>Текст</span>
+        </button>
+        <button type="button" class="tool-tab" onclick="openToolTab('emoji', this)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/></svg>
+          <span>Стикеры</span>
+        </button>
+        <button type="button" class="tool-tab" onclick="openToolTab('layers', this)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>
+          <span>Слои</span>
+        </button>
       </div>
 
       <!-- ПАНЕЛЬ 1: ФОН И ФОТО -->
       <div class="panel active" id="panel-bg">
         <div class="row">
           <label class="btn-sm primary" style="cursor:pointer;">
-            📷 Выбрать фото фона
+            <span>Выбрать фото фона</span>
             <input type="file" id="bgPhotoInput" accept="image/*" style="display:none" onchange="onUploadBgPhoto(event)">
           </label>
-          <button type="button" class="btn-sm" id="removeBgPhotoBtn" style="display:none;" onclick="removeBgPhoto()">✖ Убрать фото</button>
+          <button type="button" class="btn-sm" id="removeBgPhotoBtn" style="display:none;" onclick="removeBgPhoto()">Убрать фото</button>
         </div>
 
-        <div id="bgPhotoControls" style="display:none; margin-bottom:10px; padding:10px; background:rgba(0,0,0,0.22); border-radius:12px;">
+        <div id="bgPhotoControls" class="subbox" style="display:none;">
           <div class="slider-row"><span>Масштаб</span><input type="range" id="bgScale" min="0.2" max="3.5" step="0.02" value="1" oninput="updateBgPhotoProp()"><span id="bgScaleVal">1.0</span></div>
           <div class="slider-row"><span>Поворот</span><input type="range" id="bgRot" min="-180" max="180" step="1" value="0" oninput="updateBgPhotoProp()"><span id="bgRotVal">0°</span></div>
           <div class="slider-row"><span>Затемнение</span><input type="range" id="bgDim" min="0" max="0.8" step="0.05" value="0.2" oninput="updateBgPhotoProp()"><span id="bgDimVal">20%</span></div>
           <div class="slider-row"><span>Размытие</span><input type="range" id="bgBlur" min="0" max="8" step="1" value="0" oninput="updateBgPhotoProp()"><span id="bgBlurVal">0</span></div>
-          <div style="font-size:11.5px; color:var(--muted);">💡 Нажми на пустое место круга и двигай фото!</div>
+          <div style="font-size:12px; color:var(--muted);">Нажми на свободное место круга и двигай фото</div>
         </div>
 
-        <span class="label-sm">Градиенты и цвета фона:</span>
+        <span class="label-sm">Градиенты и цвета фона</span>
         <div class="swatches" id="bgGradients"></div>
 
-        <div class="row" style="margin-top:4px;">
-          <span class="label-sm" style="margin:0;">Свой цвет:</span>
-          <input type="color" id="bgCustomColor" value="#2a0d1c" onchange="setSolidBg(this.value)" style="width:36px; height:26px; border:none; background:none; cursor:pointer;">
-          <span class="label-sm" style="margin:0 0 0 8px;">Рамка:</span>
-          <select id="frameStyle" onchange="renderStage()" style="width:auto; flex:1; padding:5px 8px; font-size:12px;">
+        <div class="row" style="margin-bottom:8px;">
+          <span class="label-sm" style="margin:0;">Свой цвет</span>
+          <input type="color" id="bgCustomColor" value="#2a0d1c" onchange="setSolidBg(this.value)" style="width:36px; height:28px; border:none; background:none; cursor:pointer;">
+          <span class="label-sm" style="margin:0 0 0 8px;">Рамка</span>
+          <select id="frameStyle" onchange="renderStage()" style="width:auto; flex:1; height:36px; font-size:13px;">
             <option value="soft">Нежно-розовая</option>
             <option value="gold">Золотая нить</option>
             <option value="double">Двойное кольцо</option>
@@ -569,29 +563,29 @@
       <div class="panel" id="panel-text">
         <div class="row">
           <button type="button" class="btn-sm primary" onclick="addTextLayer()">+ Добавить текст</button>
-          <button type="button" class="btn-sm" onclick="centerSelected()">⌖ По центру</button>
-          <button type="button" class="btn-sm" onclick="deleteSelected()">🗑 Удалить</button>
+          <button type="button" class="btn-sm" onclick="centerSelected()">По центру</button>
+          <button type="button" class="btn-sm" onclick="deleteSelected()">Удалить</button>
         </div>
 
         <div id="textPropsBox">
-          <label class="label-sm">Текст выбранного блока:</label>
-          <textarea id="txtContent" oninput="updateSelectedText()" placeholder="Напиши послание..."></textarea>
+          <label class="label-sm">Текст выбранного блока</label>
+          <textarea id="txtContent" oninput="updateSelectedText()" placeholder="Текст послания"></textarea>
 
-          <div class="row" style="margin-top:8px;">
+          <div class="row" style="margin-top:12px;">
             <div style="flex:1;">
-              <label class="label-sm">Шрифт:</label>
+              <label class="label-sm">Шрифт</label>
               <select id="txtFont" onchange="updateSelectedText()">
-                <option value="'Caveat', cursive">✍️ Романтик (Рукописный)</option>
-                <option value="'Playfair Display', Georgia, serif">✨ Классика (Serif)</option>
-                <option value="'Montserrat', sans-serif">💎 Модерн (Sans)</option>
-                <option value="Impact, 'Arial Black', sans-serif">🔥 Плакат (Жирный)</option>
-                <option value="'Courier New', monospace">💌 Записка (Машинка)</option>
-                <option value="'Trebuchet MS', sans-serif">🌸 Уютный (Округлый)</option>
+                <option value="'Caveat', cursive">Романтик (рукописный)</option>
+                <option value="'Playfair Display', Georgia, serif">Классика (Serif)</option>
+                <option value="'Montserrat', sans-serif">Модерн (Sans)</option>
+                <option value="Impact, 'Arial Black', sans-serif">Плакат (жирный)</option>
+                <option value="'Courier New', monospace">Записка (машинка)</option>
+                <option value="'Trebuchet MS', sans-serif">Уютный (округлый)</option>
               </select>
             </div>
             <div>
-              <label class="label-sm">Цвет:</label>
-              <input type="color" id="txtColor" value="#ffffff" oninput="updateSelectedText()" style="width:44px; height:36px; border:none; background:none; cursor:pointer;">
+              <label class="label-sm">Цвет</label>
+              <input type="color" id="txtColor" value="#ffffff" oninput="updateSelectedText()" style="width:44px; height:40px; border:none; background:none; cursor:pointer;">
             </div>
           </div>
 
@@ -609,10 +603,10 @@
           <div class="slider-row"><span>Поворот</span><input type="range" id="txtRot" min="-180" max="180" step="1" value="0" oninput="updateSelectedText()"><span id="txtRotVal">0°</span></div>
 
           <div class="row">
-            <label style="font-size:12px; display:flex; align-items:center; gap:5px; cursor:pointer;">
-              <input type="checkbox" id="txtShadow" checked onchange="updateSelectedText()"> Обводка/тень
+            <label style="font-size:13px; color:var(--text-2); display:flex; align-items:center; gap:6px; cursor:pointer;">
+              <input type="checkbox" id="txtShadow" checked onchange="updateSelectedText()"> Обводка и тень
             </label>
-            <label style="font-size:12px; display:flex; align-items:center; gap:5px; cursor:pointer;">
+            <label style="font-size:13px; color:var(--text-2); display:flex; align-items:center; gap:6px; cursor:pointer;">
               <input type="checkbox" id="txtPill" onchange="updateSelectedText()"> Подложка-плашка
             </label>
           </div>
@@ -623,20 +617,20 @@
       <div class="panel" id="panel-emoji">
         <div class="emoji-grid" id="emojiGrid"></div>
         <div class="row">
-          <input class="input" id="customEmojiInput" placeholder="Или вставь любой свой эмодзи..." style="flex:1;">
-          <button type="button" class="btn-sm primary" onclick="addCustomEmoji()">+ Добавить</button>
+          <input class="input" id="customEmojiInput" placeholder="Любой свой эмодзи" style="flex:1;">
+          <button type="button" class="btn-sm primary" onclick="addCustomEmoji()">Добавить</button>
         </div>
         <div class="row">
           <label class="btn-sm" style="cursor:pointer;">
-            🖼 + Фото-стикер (в кружке)
+            <span>Фото-стикер в кружке</span>
             <input type="file" accept="image/*" style="display:none" onchange="onUploadStickerPhoto(event, 'circle')">
           </label>
           <label class="btn-sm" style="cursor:pointer;">
-            ❤️ + Фото в сердечке
+            <span>Фото в сердечке</span>
             <input type="file" accept="image/*" style="display:none" onchange="onUploadStickerPhoto(event, 'heart')">
           </label>
         </div>
-        <div id="itemTransformBox" style="padding:8px 10px; background:rgba(0,0,0,0.22); border-radius:12px;">
+        <div id="itemTransformBox" class="subbox">
           <div class="slider-row"><span>Размер</span><input type="range" id="itemSize" min="16" max="140" step="1" value="44" oninput="updateSelectedSticker()"><span id="itemSizeVal">44</span></div>
           <div class="slider-row"><span>Поворот</span><input type="range" id="itemRot" min="-180" max="180" step="1" value="0" oninput="updateSelectedSticker()"><span id="itemRotVal">0°</span></div>
         </div>
@@ -644,24 +638,24 @@
 
       <!-- ПАНЕЛЬ 4: СЛОИ И ШАБЛОНЫ -->
       <div class="panel" id="panel-layers">
-        <span class="label-sm">Быстрые шаблоны:</span>
+        <span class="label-sm">Быстрые шаблоны</span>
         <div class="row">
-          <button type="button" class="btn-sm" onclick="applyTemplate('morning')">☀️ Доброе утро</button>
-          <button type="button" class="btn-sm" onclick="applyTemplate('miss')">💌 Скучаю</button>
-          <button type="button" class="btn-sm" onclick="applyTemplate('night')">🌙 Спокойной ночи</button>
-          <button type="button" class="btn-sm" onclick="clearAllLayers()">🧹 Очистить</button>
+          <button type="button" class="btn-sm" onclick="applyTemplate('morning')">Доброе утро</button>
+          <button type="button" class="btn-sm" onclick="applyTemplate('miss')">Скучаю</button>
+          <button type="button" class="btn-sm" onclick="applyTemplate('night')">Спокойной ночи</button>
+          <button type="button" class="btn-sm" onclick="clearAllLayers()">Очистить</button>
         </div>
-        <span class="label-sm">Порядок слоёв (нажми чтобы выбрать):</span>
+        <span class="label-sm">Порядок слоёв</span>
         <div id="layersList"></div>
-        <div class="row" style="margin-top:6px;">
-          <button type="button" class="btn-sm" onclick="moveLayer(1)">⬆ Выше</button>
-          <button type="button" class="btn-sm" onclick="moveLayer(-1)">⬇ Ниже</button>
-          <button type="button" class="btn-sm" onclick="deleteSelected()">🗑 Удалить</button>
+        <div class="row" style="margin-top:8px;">
+          <button type="button" class="btn-sm" onclick="moveLayer(1)">Выше</button>
+          <button type="button" class="btn-sm" onclick="moveLayer(-1)">Ниже</button>
+          <button type="button" class="btn-sm" onclick="deleteSelected()">Удалить</button>
         </div>
       </div>
 
-      <button type="button" class="btn-send" id="sendBtn" onclick="sendPostcard(event)">
-        🚀 Отправить открытку на 2-ю страницу
+      <button type="button" class="btn-send" id="sendBtn" onclick="sendPostcard()">
+        Отправить открытку на 2-ю страницу
       </button>
       <div class="status" id="sendStatus"></div>
     </div>
@@ -670,40 +664,40 @@
     <div class="side-col">
       <div class="card">
         <div class="card-head">
-          <span class="label-sm" style="margin:0; font-size:14px;">💬 Текстовое сообщение</span>
-          <span class="card-badge">Страница 3</span>
+          <span class="card-title">Текстовое сообщение</span>
+          <span class="card-meta">Страница 3</span>
         </div>
-        <textarea id="plainTextInput" maxlength="280" placeholder="Напиши текстовое сообщение — оно откроется отдельно на 3-й странице, не перекрывая открытку ❤️"></textarea>
+        <textarea id="plainTextInput" maxlength="280" placeholder="Текст появится на 3-й странице станции, не перекрывая открытку"></textarea>
         <div class="row" style="margin-top:8px; margin-bottom:4px;">
-          <button type="button" class="btn-sm" onclick="setQuickPlainText('Доброе утро, солнышко! ☀️')">☀️ Доброе утро</button>
-          <button type="button" class="btn-sm" onclick="setQuickPlainText('Очень скучаю по тебе ❤️')">❤️ Скучаю</button>
-          <button type="button" class="btn-sm" onclick="setQuickPlainText('Спокойной ночи, обнимаю 🌙')">🌙 Спокойной ночи</button>
+          <button type="button" class="btn-sm" onclick="setQuickPlainText('Доброе утро, солнышко! ☀️')">Доброе утро</button>
+          <button type="button" class="btn-sm" onclick="setQuickPlainText('Очень скучаю по тебе ❤️')">Скучаю</button>
+          <button type="button" class="btn-sm" onclick="setQuickPlainText('Спокойной ночи, обнимаю 🌙')">Спокойной ночи</button>
         </div>
-        <button type="button" class="btn-send" id="sendPlainBtn" onclick="sendPlainTextMsg(event)">
-          ✉️ Отправить текст на 3-ю страницу
+        <button type="button" class="btn-send" id="sendPlainBtn" onclick="sendPlainTextMsg()">
+          Отправить текст на 3-ю страницу
         </button>
         <div class="status" id="plainStatus"></div>
       </div>
 
       <div class="card">
         <div class="card-head">
-          <span class="label-sm" style="margin:0; font-size:13.5px;">🔔 Ответные сердечки</span>
-          <span class="card-badge">Live</span>
+          <span class="card-title">Ответные сердечки</span>
+          <span class="card-meta" id="replyTopicLabel"></span>
         </div>
-        <p style="font-size:12px; color:var(--muted);">
-          Канал уведомлений для приложения <b>ntfy</b>: <code id="replyTopicLabel" style="color:#ffd0e0;"></code>
-        </p>
         <div id="repliesList">
-          <div class="reply-item" style="opacity:0.75;">Ожидаем нажатия Кнопки 1 на станции...</div>
+          <div class="reply-item" style="color:var(--muted);">Ожидаем нажатия Кнопки 1 на станции</div>
         </div>
       </div>
 
       <div class="card">
         <details>
-          <summary>⚙️ Настройка секретного канала ntfy.sh</summary>
-          <div style="margin-top:10px;">
-            <label class="label-sm" for="topicInput">Секретный ключ (совпадает с NTFY_TOPIC в прошивке):</label>
-            <input class="input" id="topicInput" type="text" value="love_station_xv_7d92a4c8e1" onchange="saveTopic()" style="font-family:monospace;">
+          <summary>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+            <span>Настройка секретного канала ntfy.sh</span>
+          </summary>
+          <div style="margin-top:12px;">
+            <label class="label-sm" for="topicInput">Секретный ключ (совпадает с NTFY_TOPIC в прошивке)</label>
+            <input class="input" id="topicInput" type="text" value="love_station_xv_7d92a4c8e1" onchange="saveTopic()" style="font-family:ui-monospace, SFMono-Regular, Menlo, monospace;">
           </div>
         </details>
       </div>
@@ -1389,40 +1383,17 @@
       return bgState.photoImg ? 'Фото-открытка ❤️' : 'Открытка для тебя ❤️';
     }
 
-    document.addEventListener('pointermove', (e) => {
-      document.querySelectorAll('.card').forEach(c => {
-        const r = c.getBoundingClientRect();
-        const x = e.clientX - r.left;
-        const y = e.clientY - r.top;
-        c.style.setProperty('--mx', x + 'px');
-        c.style.setProperty('--my', y + 'px');
-        const near = x > -60 && y > -60 && x < r.width + 60 && y < r.height + 60;
-        c.style.setProperty('--glow-o', near ? '1' : '0');
-      });
-      if (e.target && e.target.closest) {
-        const b = e.target.closest('.btn-send');
-        if (b) {
-          const br = b.getBoundingClientRect();
-          b.style.setProperty('--bx', (e.clientX - br.left) + 'px');
-          b.style.setProperty('--by', (e.clientY - br.top) + 'px');
-        }
-      }
-    }, { passive: true });
+    function applyTheme(t) {
+      const theme = (t === 'light') ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', theme);
+      document.getElementById('themeIconSun').classList.toggle('hidden', theme !== 'dark');
+      document.getElementById('themeIconMoon').classList.toggle('hidden', theme === 'dark');
+      try { localStorage.setItem('love_sender_theme', theme); } catch (e) {}
+    }
 
-    function spawnClickSparks(ev) {
-      if (!ev || !ev.clientX) return;
-      for (let i = 0; i < 8; i++) {
-        const sp = document.createElement('span');
-        sp.className = 'spark';
-        const ang = (Math.PI * 2 * i) / 8 + (Math.random() - 0.5) * 0.3;
-        const dist = 22 + Math.random() * 20;
-        sp.style.left = ev.clientX + 'px';
-        sp.style.top = ev.clientY + 'px';
-        sp.style.setProperty('--tx', Math.cos(ang) * dist + 'px');
-        sp.style.setProperty('--ty', Math.sin(ang) * dist + 'px');
-        document.body.appendChild(sp);
-        setTimeout(() => sp.remove(), 500);
-      }
+    function toggleTheme() {
+      const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+      applyTheme(cur === 'dark' ? 'light' : 'dark');
     }
 
     function setQuickPlainText(txt) {
@@ -1431,8 +1402,7 @@
       inp.focus();
     }
 
-    async function sendPlainTextMsg(ev) {
-      spawnClickSparks(ev);
+    async function sendPlainTextMsg() {
       const inp = document.getElementById('plainTextInput');
       const btn = document.getElementById('sendPlainBtn');
       const statusBox = document.getElementById('plainStatus');
@@ -1463,18 +1433,17 @@
         }
         inp.value = '';
         statusBox.className = 'status ok';
-        statusBox.textContent = 'Отправлено! Через пару секунд на 3-й странице станции появится твоё текстовое сообщение.';
+        statusBox.textContent = 'Отправлено. На 3-й странице станции появится текстовое сообщение.';
       } catch (e) {
         statusBox.className = 'status err';
         statusBox.textContent = 'Ошибка отправки. Проверь подключение к интернету.';
       } finally {
         btn.disabled = false;
-        btn.textContent = '✉️ Отправить текст на 3-ю страницу';
+        btn.textContent = 'Отправить текст на 3-ю страницу';
       }
     }
 
-    async function sendPostcard(ev) {
-      spawnClickSparks(ev);
+    async function sendPostcard() {
       const btn = document.getElementById('sendBtn');
       const statusBox = document.getElementById('sendStatus');
       statusBox.className = 'status';
@@ -1507,13 +1476,13 @@
         }
 
         statusBox.className = 'status ok';
-        statusBox.textContent = `Отправлено (${kb} КБ)! Через пару секунд на 2-й странице станции плавно откроется твоя открытка.`;
+        statusBox.textContent = `Отправлено (${kb} КБ). На 2-й странице станции откроется твоя открытка.`;
       } catch (e) {
         statusBox.className = 'status err';
         statusBox.textContent = 'Ошибка отправки. Проверь подключение к интернету.';
       } finally {
         btn.disabled = false;
-        btn.textContent = '🚀 Отправить открытку на 2-ю страницу';
+        btn.textContent = 'Отправить открытку на 2-ю страницу';
       }
     }
 
@@ -1562,6 +1531,8 @@
 
     (function boot() {
       try {
+        const savedTheme = localStorage.getItem('love_sender_theme');
+        if (savedTheme) applyTheme(savedTheme);
         const saved = localStorage.getItem('love_station_topic');
         if (saved) document.getElementById('topicInput').value = saved;
       } catch (e) {}
