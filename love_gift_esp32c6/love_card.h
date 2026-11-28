@@ -39,7 +39,12 @@ static inline uint32_t lvcReadU32(const uint8_t* p) {
   return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
-inline bool lvcParseMetaFromBuffer(const uint8_t* buf, size_t len, LvcMeta& meta) {
+static inline void lvcCardPath(char* out, int idx) {
+  memcpy(out, "/card0.lvc", 11);
+  out[5] = (char)('0' + idx);
+}
+
+static __attribute__((noinline)) bool lvcParseMetaFromBuffer(const uint8_t* buf, size_t len, LvcMeta& meta) {
   meta.valid = false;
   meta.caption[0] = '\0';
   if (!buf || len < LVC_HEADER_BASE) return false;
@@ -64,7 +69,7 @@ inline bool lvcParseMetaFromBuffer(const uint8_t* buf, size_t len, LvcMeta& meta
   return true;
 }
 
-inline bool lvcReadMetaFromFile(const char* path, LvcMeta& meta) {
+static __attribute__((noinline)) bool lvcReadMetaFromFile(const char* path, LvcMeta& meta) {
   meta.valid = false;
   meta.caption[0] = '\0';
   if (!path || !LittleFS.exists(path)) return false;
@@ -94,7 +99,7 @@ inline bool lvcReadMetaFromFile(const char* path, LvcMeta& meta) {
   return true;
 }
 
-inline bool lvcVerifyFileComplete(const char* path, LvcMeta& meta) {
+static __attribute__((noinline)) bool lvcVerifyFileComplete(const char* path, LvcMeta& meta) {
   if (!lvcReadMetaFromFile(path, meta)) return false;
   File f = LittleFS.open(path, "r");
   if (!f) return false;
@@ -112,7 +117,7 @@ inline bool lvcVerifyFileComplete(const char* path, LvcMeta& meta) {
   return true;
 }
 
-inline void lvcEnsureFreeSpace(size_t neededBytes, bool allowEvictCard0 = false) {
+static __attribute__((noinline)) void lvcEnsureFreeSpace(size_t neededBytes, bool allowEvictCard0 = false) {
   if (LittleFS.exists("/pending.lvc")) {
     LittleFS.remove("/pending.lvc");
   }
@@ -123,8 +128,8 @@ inline void lvcEnsureFreeSpace(size_t neededBytes, bool allowEvictCard0 = false)
 
   int minIdx = allowEvictCard0 ? 0 : 1;
   for (int i = 4; i >= minIdx && freeBytes < targetFree; i--) {
-    char p[24];
-    snprintf(p, sizeof(p), "/card%d.lvc", i);
+    char p[12];
+    lvcCardPath(p, i);
     if (LittleFS.exists(p)) {
       LittleFS.remove(p);
       used = LittleFS.usedBytes();
@@ -134,7 +139,7 @@ inline void lvcEnsureFreeSpace(size_t neededBytes, bool allowEvictCard0 = false)
 }
 
 // Декодер одной полосы QOI565 (240*16 = 3840 пикселей)
-inline void decodeQoi565Strip(const uint8_t* src, size_t srcLen, uint16_t* dst, size_t numPixels) {
+static __attribute__((noinline)) void decodeQoi565Strip(const uint8_t* src, size_t srcLen, uint16_t* dst, size_t numPixels) {
   uint16_t index[64];
   memset(index, 0, sizeof(index));
   uint16_t prev = 0x0000;
@@ -198,37 +203,33 @@ inline void decodeQoi565Strip(const uint8_t* src, size_t srcLen, uint16_t* dst, 
   }
 }
 
-// Смещает сохранённые открытки 0..3 -> 1..4 и помещает /pending.lvc в /card0.lvc
-inline void lvcPromotePendingCard(const char* pendingPath = "/pending.lvc") {
-  if (!LittleFS.exists(pendingPath)) return;
+static __attribute__((noinline)) void lvcShiftCards(const char* promotePath) {
+  if (promotePath && !LittleFS.exists(promotePath)) return;
   if (LittleFS.exists("/card4.lvc")) LittleFS.remove("/card4.lvc");
   for (int i = 3; i >= 0; i--) {
-    char src[16], dst[16];
-    snprintf(src, sizeof(src), "/card%d.lvc", i);
-    snprintf(dst, sizeof(dst), "/card%d.lvc", i + 1);
+    char src[12], dst[12];
+    lvcCardPath(src, i);
+    lvcCardPath(dst, i + 1);
     if (LittleFS.exists(src)) {
       if (LittleFS.exists(dst)) LittleFS.remove(dst);
       LittleFS.rename(src, dst);
     }
   }
-  if (LittleFS.exists("/card0.lvc")) LittleFS.remove("/card0.lvc");
-  LittleFS.rename(pendingPath, "/card0.lvc");
-}
-
-// Если пришло обычное текстовое сообщение без картинки, сдвигаем слоты файлов открыток
-inline void lvcShiftEmptySlot0() {
-  if (LittleFS.exists("/card4.lvc")) LittleFS.remove("/card4.lvc");
-  for (int i = 3; i >= 0; i--) {
-    char src[16], dst[16];
-    snprintf(src, sizeof(src), "/card%d.lvc", i);
-    snprintf(dst, sizeof(dst), "/card%d.lvc", i + 1);
-    if (LittleFS.exists(src)) {
-      LittleFS.rename(src, dst);
-    }
+  if (promotePath) {
+    if (LittleFS.exists("/card0.lvc")) LittleFS.remove("/card0.lvc");
+    LittleFS.rename(promotePath, "/card0.lvc");
   }
 }
 
-inline void lvcDrawStripFromFile(File& f, const LvcMeta& meta, int stripIdx, uint16_t* stripBuf,
+static inline void lvcPromotePendingCard(const char* pendingPath = "/pending.lvc") {
+  lvcShiftCards(pendingPath);
+}
+
+static inline void lvcShiftEmptySlot0() {
+  lvcShiftCards(nullptr);
+}
+
+static __attribute__((noinline)) void lvcDrawStripFromFile(File& f, const LvcMeta& meta, int stripIdx, uint16_t* stripBuf,
                                  uint8_t* compBuf, size_t compBufSize,
                                  uint16_t ringColor, Adafruit_GC9A01A& tft) {
   if (stripIdx < 0 || stripIdx >= LVC_STRIP_COUNT) return;
