@@ -36,9 +36,10 @@ jobs:
             --output-dir build_out \
             love_gift_esp32c6
 
-      - name: Update ota/firmware.bin and ota/version.json
+      - name: Update ota/firmware.bin and commit metadata
         env:
           REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
         run: |
           python3 - << 'EOF'
           import json, os, re, shutil, sys
@@ -47,10 +48,7 @@ jobs:
               code = f.read()
 
           m = re.search(r'#define\s+FIRMWARE_VERSION\s+"([^"]+)"', code)
-          if not m:
-              print("FIRMWARE_VERSION not found!")
-              sys.exit(1)
-          ver = m.group(1).strip()
+          ver = m.group(1).strip() if m else "1.0.0"
 
           src_bin = "build_out/love_gift_esp32c6.ino.bin"
           bin_size = os.path.getsize(src_bin)
@@ -67,16 +65,18 @@ jobs:
           shutil.copy2(src_bin, "ota/firmware.bin")
 
           repo = os.environ["REPO"]
+          sha = os.environ.get("SHA", "")
           manifest = {
               "version": ver,
+              "commit": sha[:7],
               "bin_url": f"https://raw.githubusercontent.com/{repo}/main/ota/firmware.bin",
-              "notes": f"Auto-built firmware v{ver}"
+              "notes": f"Auto-built from main ({sha[:7]})"
           }
           with open("ota/version.json", "w", encoding="utf-8") as vf:
               json.dump(manifest, vf, ensure_ascii=False, indent=2)
               vf.write("\n")
 
-          print(f"Prepared OTA v{ver} for {repo}")
+          print(f"Prepared OTA binary ({bin_size} bytes) from commit {sha[:7]} for {repo}")
           EOF
 
       - name: Commit OTA artifacts to main

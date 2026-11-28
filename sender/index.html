@@ -1758,7 +1758,9 @@
       document.getElementById('admCityTz').textContent = `${d.city || 'Красноярск'} · ${tzStr}`;
       document.getElementById('admHeap').textContent = d.heap ? `${Math.round(d.heap / 1024)} КБ свободно` : '—';
       document.getElementById('admUptime').textContent = `Аптайм ${fmtUptime(d.up)}`;
-      document.getElementById('admVer').textContent = d.ver ? `v${d.ver}` : '—';
+      document.getElementById('admVer').textContent = d.ver
+        ? `v${d.ver}${d.commit ? ' · #' + d.commit : ''}`
+        : (d.commit ? `#${d.commit}` : '—');
       const otaLabels = ['Ожидание', 'Проверка...', 'Актуальна', 'Недоступно', 'Обновляется'];
       document.getElementById('admOta').textContent = otaLabels[d.ota || 0] || '—';
 

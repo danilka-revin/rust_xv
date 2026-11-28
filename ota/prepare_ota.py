@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 """
 Помощник для быстрой подготовки OTA-обновления на GitHub.
+Станция проверяет обновления по последнему коммиту в ветке main и сравнивает SHA файла ota/firmware.bin,
+поэтому менять цифру версии больше не обязательно.
+
 Пример запуска после "Sketch -> Export Compiled Binary" в Arduino IDE:
-  python3 ota/prepare_ota.py 1.0.1
+  python3 ota/prepare_ota.py
+  python3 ota/prepare_ota.py path/to/love_gift_esp32c6.ino.bin
 """
 
 import glob
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 
@@ -36,14 +41,13 @@ def find_compiled_bin():
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("Использование: python3 ota/prepare_ota.py <новая_версия> [путь_к_ino.bin]")
-        print("Пример:        python3 ota/prepare_ota.py 1.3.8")
-        sys.exit(1)
+    arg_path = sys.argv[1] if len(sys.argv) >= 2 and sys.argv[1].endswith(".bin") else None
+    new_ver = None
+    if len(sys.argv) >= 2 and not sys.argv[1].endswith(".bin"):
+        new_ver = sys.argv[1].strip().lstrip("v")
+        arg_path = sys.argv[2] if len(sys.argv) >= 3 else None
 
-    new_ver = sys.argv[1].strip().lstrip("v")
-
-    bin_path = sys.argv[2] if len(sys.argv) >= 3 else find_compiled_bin()
+    bin_path = arg_path or find_compiled_bin()
 
     if bin_path:
         if not os.path.isfile(bin_path):
@@ -64,19 +68,31 @@ def main():
         print(f"✓ Скопирован бинарник: {bin_path} -> ota/firmware.bin ({size_kb:.1f} КБ / {size_b} байт)")
     else:
         print("! Файл *.ino.bin не найден автоматически.")
-        print("  В Arduino IDE нажмите Sketch -> Export Compiled Binary и передайте путь аргументом:")
-        print(f"  python3 ota/prepare_ota.py {new_ver} path/to/love_gift_esp32c6.ino.bin")
+        print("  В Arduino IDE нажмите Sketch -> Export Compiled Binary и запустите:")
+        print("  python3 ota/prepare_ota.py path/to/love_gift_esp32c6.ino.bin")
         sys.exit(1)
 
-    with open(VERSION_JSON, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    data["version"] = new_ver
+    if os.path.isfile(VERSION_JSON):
+        with open(VERSION_JSON, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    else:
+        data = {"version": "1.3.8", "bin_url": "https://raw.githubusercontent.com/danilka-revin/rust_xv/main/ota/firmware.bin"}
+
+    if new_ver:
+        data["version"] = new_ver
+    try:
+        head_sha = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, text=True).strip()
+        if head_sha:
+            data["commit"] = head_sha
+    except Exception:
+        pass
+
     with open(VERSION_JSON, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
         f.write("\n")
 
-    print(f"✓ Обновлён ota/version.json -> version: {new_ver}")
-    print("Теперь сделайте git add ota/ && git commit -m 'Update firmware' && git push!")
+    print("✓ Готово! Станция обнаружит изменение ota/firmware.bin при новом коммите в main.")
+    print("Теперь сделайте: git add ota/ && git commit -m 'Update firmware binary' && git push origin main")
 
 
 if __name__ == "__main__":

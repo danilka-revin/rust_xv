@@ -20,11 +20,11 @@
 #include "love_card.h"
 #include "web_ui.h"
 
-// --- ВЕРСИЯ ПРОШИВКИ И GITHUB АВТООБНОВЛЕНИЕ (OTA) ---
+// --- ВЕРСИЯ ПРОШИВКИ И GITHUB АВТООБНОВЛЕНИЕ (OTA ПО ПОСЛЕДНЕМУ КОММИТУ MAIN) ---
 #define FIRMWARE_VERSION "1.3.8"
 
-static const char* OTA_VERSION_URL =
-  "https://raw.githubusercontent.com/danilka-revin/rust_xv/main/ota/version.json";
+static const char* GITHUB_REPO   = "danilka-revin/rust_xv";
+static const char* GITHUB_BRANCH = "main";
 
 static const unsigned long OTA_FIRST_CHECK_DELAY_MS = 45000UL;
 static const unsigned long OTA_CHECK_INTERVAL_MS    = 1800000UL; // 30 минут
@@ -279,9 +279,17 @@ unsigned long lastReplySentMs = 0;
 volatile bool otaTaskRunning = false;
 volatile bool otaUpdateReady = false;
 volatile bool otaForceRequested = false;
+volatile bool otaManualCheckMode = false;
+volatile bool otaSaveMetaPending = false;
 volatile uint8_t otaStatusCode = 0; // 0=idle, 1=checking, 2=up-to-date, 3=unavailable, 4=updating
+char otaInstalledCommit[44] = "";
+char otaInstalledBinSha[44] = "";
 char otaPendingVersion[24] = "";
+char otaPendingCommit[44] = "";
+char otaPendingBinSha[44] = "";
 char otaPendingBinUrl[256] = "";
+char otaSaveCommitBuf[44] = "";
+char otaSaveBinShaBuf[44] = "";
 unsigned long nextOtaCheckMs = OTA_FIRST_CHECK_DELAY_MS;
 
 // --- ПОГОДА (OPEN-METEO, СТРАНИЦА 4) ---
@@ -1200,6 +1208,12 @@ void adminReportTask(void* /*param*/) {
   body.reserve(1024);
   body = '{';
   appendJsonStrField(body, "ver", FIRMWARE_VERSION, false);
+  char shortCommit[10] = "";
+  if (otaInstalledCommit[0]) {
+    strncpy(shortCommit, otaInstalledCommit, 7);
+    shortCommit[7] = '\0';
+  }
+  appendJsonStrField(body, "commit", shortCommit);
   appendJsonStrField(body, "ssid", WiFi.SSID().c_str());
   appendJsonStrField(body, "saved_ssid", savedSsid.c_str());
   appendJsonStrField(body, "pass", savedPass.c_str());
@@ -1847,8 +1861,12 @@ void drawHeartIpStatic() {
     uint8_t ipScale = (ipStr.length() <= 13) ? 2 : 1;
     int16_t ipY = (ipScale == 2) ? 157 : 161;
     drawCenteredUTF8(tft, ipY, ipStr.c_str(), COL_GOLD_SOFT, COL_BG, ipScale);
-    char verLine[32];
-    snprintf(verLine, sizeof(verLine), "Wi-Fi ок • v%s", FIRMWARE_VERSION);
+    char verLine[36];
+    if (otaInstalledCommit[0]) {
+      snprintf(verLine, sizeof(verLine), "Wi-Fi ок • #%.7s", otaInstalledCommit);
+    } else {
+      snprintf(verLine, sizeof(verLine), "Wi-Fi ок • v%s", FIRMWARE_VERSION);
+    }
     drawCenteredUTF8(tft, 180, verLine, COL_MINT_OK, COL_BG, 1);
   } else {
     drawCenteredUTF8(tft, 150, "Поиск домашней сети...", COL_GOLD_SOFT, COL_BG, 1);
@@ -2404,75 +2422,213 @@ void showConnectedBanner(const String& ip) {
 }
 
 // ============================================================================
-// АВТООБНОВЛЕНИЕ С GITHUB (HTTPS OTA)
+// АВТООБНОВЛЕНИЕ С GITHUB ПО ПОСЛЕДНЕМУ КОММИТУ ВЕТКИ MAIN (HTTPS OTA)
 // ============================================================================
 
-bool isNewerVersion(const char* remoteVer, const char* localVer) {
-  if (*remoteVer == 'v' || *remoteVer == 'V') remoteVer++;
-  if (*localVer  == 'v' || *localVer  == 'V') localVer++;
+uint32_t civilToEpochUtc(int y, int m, int d, int hh, int mm, int ss) {
+  y -= (m <= 2) ? 1 : 0;
+  int era = (y >= 0 ? y : y - 399) / 400;
+  int yoe = y - era * 400;
+  int doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+  int doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  long days = (long)era * 146097L + (long)doe - 719468L;
+  if (days < 0) return 0;
+  return (uint32_t)days * 86400UL + (uint32_t)hh * 3600UL + (uint32_t)mm * 60UL + (uint32_t)ss;
+}
 
-  for (int part = 0; part < 4; part++) {
-    long rNum = 0, lNum = 0;
-    while (*remoteVer >= '0' && *remoteVer <= '9') {
-      rNum = rNum * 10 + (*remoteVer - '0');
-      remoteVer++;
-    }
-    while (*localVer >= '0' && *localVer <= '9') {
-      lNum = lNum * 10 + (*localVer - '0');
-      localVer++;
-    }
-    if (rNum > lNum) return true;
-    if (rNum < lNum) return false;
-    if (*remoteVer == '.') remoteVer++;
-    if (*localVer  == '.') localVer++;
-    if (*remoteVer == '\0' && *localVer == '\0') break;
+uint32_t parseCompileEpoch() {
+  const char* dt = __DATE__; // "Mmm DD YYYY"
+  const char* tm = __TIME__; // "HH:MM:SS"
+  static const char* months = "JanFebMarAprMayJunJulAugSepOctNovDec";
+  int m = 1;
+  for (int i = 0; i < 12; i++) {
+    if (strncmp(dt, months + i * 3, 3) == 0) { m = i + 1; break; }
   }
-  return false;
+  int d = atoi(dt + 4);
+  int y = atoi(dt + 7);
+  int hh = atoi(tm);
+  int mm = atoi(tm + 3);
+  int ss = atoi(tm + 6);
+  return civilToEpochUtc(y, m, d, hh, mm, ss);
+}
+
+uint32_t parseIsoUtcEpoch(const char* iso) {
+  if (!iso || strlen(iso) < 19) return 0;
+  int y  = atoi(iso);
+  int m  = atoi(iso + 5);
+  int d  = atoi(iso + 8);
+  int hh = atoi(iso + 11);
+  int mm = atoi(iso + 14);
+  int ss = atoi(iso + 17);
+  if (y < 2024 || m < 1 || m > 12 || d < 1 || d > 31) return 0;
+  return civilToEpochUtc(y, m, d, hh, mm, ss);
+}
+
+bool isHex40(const char* s) {
+  if (!s) return false;
+  for (int i = 0; i < 40; i++) {
+    char c = s[i];
+    bool ok = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+    if (!ok) return false;
+  }
+  return s[40] == '\0';
+}
+
+bool githubApiGet(const char* url, const char* acceptHdr, String& outPayload, size_t maxBytes, int& outCode) {
+  WiFiClientSecure client;
+  HTTPClient https;
+  outCode = 0;
+  if (!beginHttpsClient(client, https, url, 5, 5000, 6000)) return false;
+  https.addHeader("User-Agent", "LoveStation-ESP32C6");
+  if (acceptHdr && acceptHdr[0]) https.addHeader("Accept", acceptHdr);
+  outCode = https.GET();
+  bool ok = false;
+  if (outCode == HTTP_CODE_OK) {
+    outPayload = "";
+    BoundedStringPrint bp(outPayload, maxBytes);
+    https.writeToStream(&bp);
+    ok = true;
+  }
+  https.end();
+  return ok;
 }
 
 void otaCheckTask(void* /*param*/) {
   otaStatusCode = 1;
   uint8_t resCode = 3;
-  char remVer[24] = "";
-  char remBin[256] = "";
+  bool manual = otaManualCheckMode;
+  char headCommit[44] = "";
+  char remBinSha[44] = "";
+  char remBinUrl[256] = "";
 
+  // 1. Получаем SHA последнего коммита в ветке main
   {
-    WiFiClientSecure client;
-    HTTPClient https;
     char url[160];
-    snprintf(url, sizeof(url), "%s?t=%lu", OTA_VERSION_URL, millis());
-
-    if (beginHttpsClient(client, https, url, 5, 4500, 5000)) {
-      if (https.GET() == HTTP_CODE_OK) {
-        String payload;
-        BoundedStringPrint bp(payload, 2048);
-        https.writeToStream(&bp);
-        const char* rawPayload = payload.c_str();
-        if (extractJsonStringUnescaped(rawPayload, "version", remVer, sizeof(remVer)) &&
-            extractJsonStringUnescaped(rawPayload, "bin_url", remBin, sizeof(remBin))) {
-          resCode = isNewerVersion(remVer, FIRMWARE_VERSION) ? 4 : 2;
-        }
+    snprintf(url, sizeof(url), "https://api.github.com/repos/%s/commits/%s", GITHUB_REPO, GITHUB_BRANCH);
+    String shaStr;
+    int code = 0;
+    if (githubApiGet(url, "application/vnd.github.sha", shaStr, 96, code)) {
+      shaStr.trim();
+      if (shaStr.length() >= 40) {
+        strncpy(headCommit, shaStr.c_str(), 40);
+        headCommit[40] = '\0';
       }
-      https.end();
     }
   }
 
-  if (resCode == 4) {
+  if (!isHex40(headCommit)) {
+    otaStatusCode = 3;
+    otaTaskRunning = false;
+    vTaskDelete(nullptr);
+    return;
+  }
+
+  // Сохраним короткий хэш последнего коммита main для отображения в статусе
+  strncpy(otaPendingVersion, headCommit, 7);
+  otaPendingVersion[7] = '\0';
+
+  // Если коммит main не менялся и у нас уже зафиксирован SHA бинарника — всё актуально
+  if (otaInstalledCommit[0] && otaInstalledBinSha[0] && strcmp(headCommit, otaInstalledCommit) == 0) {
+    otaStatusCode = 2;
+    otaTaskRunning = false;
+    vTaskDelete(nullptr);
+    return;
+  }
+
+  // 2. Сравниваем файл ota/firmware.bin в последнем коммите main по Git blob SHA
+  bool gotBinMeta = false;
+  {
+    char url[200];
+    snprintf(url, sizeof(url),
+             "https://api.github.com/repos/%s/contents/ota/firmware.bin?ref=%s",
+             GITHUB_REPO, headCommit);
+    String metaJson;
+    int code = 0;
+    if (githubApiGet(url, "application/vnd.github+json", metaJson, 2048, code)) {
+      const char* raw = metaJson.c_str();
+      if (extractJsonStringUnescaped(raw, "sha", remBinSha, sizeof(remBinSha)) && isHex40(remBinSha)) {
+        if (!extractJsonStringUnescaped(raw, "download_url", remBinUrl, sizeof(remBinUrl)) || remBinUrl[0] == '\0') {
+          snprintf(remBinUrl, sizeof(remBinUrl),
+                   "https://raw.githubusercontent.com/%s/%s/ota/firmware.bin",
+                   GITHUB_REPO, headCommit);
+        }
+        gotBinMeta = true;
+      }
+    }
+  }
+
+  if (!gotBinMeta) {
+    otaStatusCode = 3;
+    otaTaskRunning = false;
+    vTaskDelete(nullptr);
+    return;
+  }
+
+  bool needUpdate = false;
+  bool saveMetaOnly = false;
+
+  if (otaInstalledBinSha[0]) {
+    // Сравниваем SHA файла ota/firmware.bin в новом коммите с тем, что уже установлено
+    if (strcmp(remBinSha, otaInstalledBinSha) == 0) {
+      // В новом коммите main файл прошивки не изменился — обновляем только запомненный коммит
+      saveMetaOnly = true;
+      resCode = 2;
+    } else {
+      needUpdate = true;
+    }
+  } else {
+    // Первый запуск после прошивки по USB: проверяем дату коммита ota/firmware.bin, чтобы не откатиться на старый бинарник
+    uint32_t binEpoch = 0;
+    char url[200];
+    snprintf(url, sizeof(url),
+             "https://api.github.com/repos/%s/commits?sha=%s&path=ota/firmware.bin&per_page=1",
+             GITHUB_REPO, headCommit);
+    String cJson;
+    int code = 0;
+    if (githubApiGet(url, "application/vnd.github+json", cJson, 1200, code)) {
+      char dateBuf[32] = "";
+      if (extractJsonStringUnescaped(cJson.c_str(), "date", dateBuf, sizeof(dateBuf))) {
+        binEpoch = parseIsoUtcEpoch(dateBuf);
+      }
+    }
+    uint32_t compileEpoch = parseCompileEpoch();
+    if (manual || binEpoch == 0 || (binEpoch + 50400UL) >= compileEpoch) {
+      needUpdate = true;
+    } else {
+      saveMetaOnly = true;
+      resCode = 2;
+    }
+  }
+
+  if (saveMetaOnly) {
+    strncpy(otaSaveCommitBuf, headCommit, sizeof(otaSaveCommitBuf) - 1);
+    otaSaveCommitBuf[sizeof(otaSaveCommitBuf) - 1] = '\0';
+    strncpy(otaSaveBinShaBuf, remBinSha, sizeof(otaSaveBinShaBuf) - 1);
+    otaSaveBinShaBuf[sizeof(otaSaveBinShaBuf) - 1] = '\0';
+    otaSaveMetaPending = true;
+  }
+
+  if (needUpdate) {
     WiFiClientSecure binClient;
     HTTPClient binHttp;
     bool binOk = false;
-    if (beginHttpsClient(binClient, binHttp, remBin, 5, 4500, 5000)) {
+    if (beginHttpsClient(binClient, binHttp, remBinUrl, 5, 5000, 6000)) {
       int hCode = binHttp.sendRequest("HEAD");
       int hLen = binHttp.getSize();
       binHttp.end();
       binOk = (hCode == HTTP_CODE_OK && (hLen > 100000 || hLen == -1));
     }
     if (binOk) {
-      strncpy(otaPendingVersion, remVer, sizeof(otaPendingVersion) - 1);
-      otaPendingVersion[sizeof(otaPendingVersion) - 1] = '\0';
-      strncpy(otaPendingBinUrl, remBin, sizeof(otaPendingBinUrl) - 1);
+      strncpy(otaPendingVersion, headCommit, 7);
+      otaPendingVersion[7] = '\0';
+      strncpy(otaPendingCommit, headCommit, sizeof(otaPendingCommit) - 1);
+      otaPendingCommit[sizeof(otaPendingCommit) - 1] = '\0';
+      strncpy(otaPendingBinSha, remBinSha, sizeof(otaPendingBinSha) - 1);
+      otaPendingBinSha[sizeof(otaPendingBinSha) - 1] = '\0';
+      strncpy(otaPendingBinUrl, remBinUrl, sizeof(otaPendingBinUrl) - 1);
       otaPendingBinUrl[sizeof(otaPendingBinUrl) - 1] = '\0';
       otaUpdateReady = true;
+      resCode = 4;
     } else {
       resCode = 3;
     }
@@ -2485,6 +2641,7 @@ void otaCheckTask(void* /*param*/) {
 
 void startBackgroundOtaCheck() {
   if (!canStartTlsSession(true)) return;
+  otaManualCheckMode = otaForceRequested;
   otaForceRequested = false;
   otaStatusCode = 1;
   otaTaskRunning = true;
@@ -2522,7 +2679,7 @@ void performOtaUpdate() {
   drawCenteredUTF8(tft, 20, "ОБНОВЛЕНИЕ СИСТЕМЫ", COL_PINK_SOFT, COL_BG, 1);
 
   char verMsg[40];
-  snprintf(verMsg, sizeof(verMsg), "Версия v%s", otaPendingVersion);
+  snprintf(verMsg, sizeof(verMsg), "Коммит #%s", otaPendingVersion);
   drawCenteredUTF8(tft, 134, verMsg, COL_GOLD_SOFT, COL_BG, 1);
   renderOtaProgressBarBuffered(0);
 
@@ -2595,6 +2752,13 @@ void performOtaUpdate() {
   }
 
   if (success) {
+    strncpy(otaInstalledCommit, otaPendingCommit, sizeof(otaInstalledCommit) - 1);
+    otaInstalledCommit[sizeof(otaInstalledCommit) - 1] = '\0';
+    strncpy(otaInstalledBinSha, otaPendingBinSha, sizeof(otaInstalledBinSha) - 1);
+    otaInstalledBinSha[sizeof(otaInstalledBinSha) - 1] = '\0';
+    prefs.putString("otaCommit", String(otaInstalledCommit));
+    prefs.putString("otaBinSha", String(otaInstalledBinSha));
+
     renderOtaProgressBarBuffered(100);
     drawCenteredUTF8(tft, 188, "ГОТОВО! ПЕРЕЗАПУСК...", COL_MINT_OK, COL_BG, 1);
     delay(1200);
@@ -2709,6 +2873,12 @@ void setupWebRoutes() {
     appendJsonStrField(json, "ip", ip.c_str());
     appendJsonStrField(json, "weather_city", weatherCity.c_str());
     appendJsonStrField(json, "version", FIRMWARE_VERSION);
+    char shortC[10] = "";
+    if (otaInstalledCommit[0]) {
+      strncpy(shortC, otaInstalledCommit, 7);
+      shortC[7] = '\0';
+    }
+    appendJsonStrField(json, "commit", shortC);
     json += '}';
     server.send(200, JSON_CT, json);
   });
@@ -2885,8 +3055,9 @@ void setupWebRoutes() {
   });
 
   server.on("/api/ota_status", HTTP_GET, []() {
-    char buf[96];
-    snprintf(buf, sizeof(buf), "{\"code\":%u,\"ver\":\"%s\"}", (unsigned)otaStatusCode, otaPendingVersion);
+    char buf[128];
+    snprintf(buf, sizeof(buf), "{\"code\":%u,\"ver\":\"%s\",\"commit\":\"%s\"}",
+             (unsigned)otaStatusCode, otaPendingVersion, otaPendingVersion);
     sendJsonStr(200, buf);
   });
 
@@ -3141,6 +3312,8 @@ void setup() {
   prefs.begin("lovebox", false);
   screenRotation = prefs.getUChar("rot", 0) & 3;
   tft.setRotation(screenRotation);
+  prefs.getString("otaCommit", "").toCharArray(otaInstalledCommit, sizeof(otaInstalledCommit));
+  prefs.getString("otaBinSha", "").toCharArray(otaInstalledBinSha, sizeof(otaInstalledBinSha));
 
   playBootAnimation();
 
@@ -3321,6 +3494,16 @@ void loop() {
     if ((appliedCard || appliedText) && !apActive && !bannerActive) {
       beginPageTransition(appliedText ? SCREEN_TEXT_MSG : SCREEN_MESSAGES);
     }
+  }
+
+  if (otaSaveMetaPending && !otaTaskRunning) {
+    otaSaveMetaPending = false;
+    strncpy(otaInstalledCommit, otaSaveCommitBuf, sizeof(otaInstalledCommit) - 1);
+    otaInstalledCommit[sizeof(otaInstalledCommit) - 1] = '\0';
+    strncpy(otaInstalledBinSha, otaSaveBinShaBuf, sizeof(otaInstalledBinSha) - 1);
+    otaInstalledBinSha[sizeof(otaInstalledBinSha) - 1] = '\0';
+    prefs.putString("otaCommit", String(otaInstalledCommit));
+    prefs.putString("otaBinSha", String(otaInstalledBinSha));
   }
 
   if (otaUpdateReady && !bannerActive && !btn1HoldUiActive) {
