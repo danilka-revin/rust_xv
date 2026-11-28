@@ -669,9 +669,9 @@ STUDIO_HTML = r"""<!DOCTYPE html>
 
       const txt = st.text || 'Думаю о тебе ♥';
       const sc = txt.length <= 14 ? 15 : 12;
-      const lines = wrapLines(txt, txt.length <= 14 ? 14 : 24, 3);
+      const lines = wrapTextJS(txt, txt.length <= 14 ? 14 : 24).slice(0, 3);
       const step = sc + 5;
-      const startY = 94 + (64 - lines.length * step) / 2;
+      const startY = 94 + (64 - lines.length * step) / 2 + 2;
       lines.forEach((ln, i) => centerText(ln, startY + i * step, sc, '#ffffff'));
 
       let tmLabel = 'Статус любимого ♥';
@@ -812,13 +812,26 @@ STUDIO_HTML = r"""<!DOCTYPE html>
 
     function wrapTextJS(txt, maxChars) {
       const lines = [];
-      for (const rawLine of txt.split('\n')) {
+      for (const rawLine of String(txt || '').split('\n')) {
         const words = rawLine.trim().split(/\s+/);
         let cur = '';
         for (const w of words) {
-          if (!cur) cur = w;
-          else if ((cur + ' ' + w).length <= maxChars) cur += ' ' + w;
-          else { lines.push(cur); cur = w; }
+          if (!w) continue;
+          if (w.length > maxChars) {
+            if (cur) { lines.push(cur); cur = ''; }
+            for (let i = 0; i < w.length; i += maxChars) {
+              const part = w.slice(i, i + maxChars);
+              if (part.length === maxChars) lines.push(part);
+              else cur = part;
+            }
+          } else if (!cur) {
+            cur = w;
+          } else if ((cur + ' ' + w).length <= maxChars) {
+            cur += ' ' + w;
+          } else {
+            lines.push(cur);
+            cur = w;
+          }
         }
         if (cur) lines.push(cur);
       }
