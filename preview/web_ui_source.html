@@ -878,11 +878,6 @@
         <span class="weather-mood" id="weatherMoodText">Гулябельно</span>
       </div>
 
-      <div class="weather-row" id="myStatusRow" style="margin-top:8px;">
-        <span style="color:var(--muted);">Сейчас он: <strong id="myStatusSiteText" style="color:var(--text); font-weight:500;">Думаю о тебе ♥</strong></span>
-        <span class="weather-mood" id="myStatusSiteTime" style="background:var(--accent-soft); color:var(--accent-text);">Онлайн</span>
-      </div>
-
       <button type="button" class="btn btn-accent" id="pulseBtn" onclick="sendLovePulse(false, event)">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
         <span>Послать сердечко в ответ</span>
@@ -1570,34 +1565,14 @@
       }
     }
 
-    async function loadMyStatus() {
-      try {
-        const res = await fetch('/api/my_status');
-        const st = await res.json();
-        const el = document.getElementById('myStatusSiteText');
-        const tmEl = document.getElementById('myStatusSiteTime');
-        if (el && st.text) el.textContent = st.text;
-        if (tmEl) {
-          if (st.epoch && st.epoch > 1700000000) {
-            const d = new Date(st.epoch * 1000);
-            tmEl.textContent = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-          } else {
-            tmEl.textContent = 'Сейчас';
-          }
-        }
-      } catch (e) {}
-    }
-
     updateLoveTimer();
     setInterval(updateLoveTimer, 1000);
     setInterval(loadMessages, 5000);
     setInterval(loadWeather, 30000);
-    setInterval(loadMyStatus, 10000);
     syncPhoneTime();
     loadStatus();
     loadMessages();
     loadWeather();
-    loadMyStatus();
   </script>
 </body>
 </html>
